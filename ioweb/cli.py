@@ -1,6 +1,11 @@
+from gevent import monkey
+monkey.patch_all()#thread=False)
+
 import sys
 import re
+import time
 import os.path
+import json
 import logging
 from argparse import ArgumentParser
 
@@ -63,10 +68,32 @@ def collect_crawlers():
 
 def setup_logging(network_logs=False):#, control_logs=False):
     logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger('urllib3.connectionpool').setLevel(level=logging.ERROR)
+    logging.getLogger('ioweb.urllib3_custom').setLevel(level=logging.ERROR)
     if not network_logs:
         logging.getLogger('ioweb.network').propagate = False
     #if not control_logs:
     #    logging.getLogger('crawler.control').propagate = False
+
+
+def format_elapsed_time(total_sec):
+    hours = minutes = 0
+    if total_sec > 3600:
+        hours, total_sec = divmod(total_sec, 3600)
+    if total_sec > 60:
+        minutes, total_sec = divmod(total_sec, 3600)
+    return '%02d:%02d:%.2f' % (hours, minutes, total_sec)
+
+
+def get_crawler(crawler_id):
+    reg = collect_crawlers()
+    if crawler_id not in reg:
+        sys.stderr.write(
+            'Could not load %s crawler\n' % opts.crawler_id
+        )
+        sys.exit(1)
+    else:
+        return reg[crawler_id]
 
 
 def run_command_crawl():
@@ -74,24 +101,85 @@ def run_command_crawl():
     parser.add_argument('crawler_id')
     parser.add_argument('-t', '--network-threads', type=int, default=1)
     parser.add_argument('-n', '--network-logs', action='store_true', default=False)
+    parser.add_argument('-p', '--profile', action='store_true', default=False)
+    parser.add_argument('--task-gen-api', type=str)
     #parser.add_argument('--control-logs', action='store_true', default=False)
     opts = parser.parse_args()
 
     setup_logging(network_logs=opts.network_logs)#, control_logs=opts.control_logs)
 
-    reg = collect_crawlers()
-    if opts.crawler_id not in reg:
-        sys.stderr.write(
-            'Could not load %s crawler\n' % opts.crawler_id
-        )
-        sys.exit(1)
-    else:
-        cls = reg[opts.crawler_id]
-        bot = cls(network_threads=opts.network_threads)
-        try:
+    cls = get_crawler(opts.crawler_id)
+    bot = cls(
+        network_threads=opts.network_threads,
+        task_gen_api=opts.task_gen_api
+    )
+    try:
+        if opts.profile:
+            import cProfile
+            import pyprof2calltree
+            import pstats
+
+            profile_file = 'var/%s.prof' % opts.crawler_id
+            profile_tree_file = 'var/%s.prof.out' % opts.crawler_id
+
+            prof = cProfile.Profile()
+            try:
+                prof.runctx('bot.run()', globals(), locals())
+            finally:
+                stats = pstats.Stats(prof)
+                stats.strip_dirs()
+                pyprof2calltree.convert(stats, profile_tree_file)
+        else:
             bot.run()
-        except KeyboardInterrupt:
-            pass
-        print('Stats:')
-        for key, val in bot.stat.counters.items():
-            print(' * %s: %s' % (key, val))
+    except KeyboardInterrupt:
+        pass
+    print('Stats:')
+    for key, val in sorted(bot.stat.counters.items()):
+        print(' * %s: %s' % (key, val))
+    if bot._run_started:
+        print('Elapsed: %s' % format_elapsed_time(time.time() - bot._run_started))
+    else:
+        print('Elapsed: NA')
+
+
+
+
+def run_command_taskgen():
+    parser = ArgumentParser()
+    parser.add_argument('crawler_id')
+    opts = parser.parse_args()
+
+    cls = get_crawler(opts.crawler_id)
+    bot = cls()
+    bot.prepare()
+    task_gen = bot.task_generator()
+
+    from bottle import run, Bottle, request
+
+    app = Bottle()
+
+    @app.route('/api/task/get')
+    def page_task_get():
+        try:
+            num_tasks = int(request.query.number or '')
+        except ValueError:
+            num_tasks = 100
+
+        count = 0
+        items = []
+        stop_event = False
+        while count < num_tasks:
+            try:
+                item = next(task_gen)
+            except StopIteration:
+                stop_event = True
+                break
+            else:
+                items.append(item.as_data())
+                count += 1
+        if not items and stop_event:
+            return {'status': 'fail', 'error': {'code': 'stop-iteration'}}
+        else:
+            return {'status': 'ok', 'result': items} 
+
+    run(app, port='8887')

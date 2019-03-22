@@ -9,7 +9,12 @@ class Stat(object):
         'crawler:request-ok': 'req-ok',
         'crawler:request-retry': 'req-retry',
         'crawler:request-fail': 'req-fail',
+        'crawler:request-rejected': 'req-rejected',
     }
+    ignore_prefixes = (
+        'http:',
+        'network-error:',
+    )
     def __init__(
             self,
             speed_keys=None,
@@ -58,7 +63,9 @@ class Stat(object):
             )
             keys = self.counters.keys()
             counter_str = ', '.join(
-                '%s: %s' % (self.aliases.get(x, x), self.counters[x]) for x in keys
+                '%s: %s' % (self.aliases.get(x, x), self.counters[x])
+                for x in keys
+                if not x.startswith(self.ignore_prefixes)
             )
             logging.debug('Stat:%s [%s]', rps_str, counter_str)
             self.logging_time = now

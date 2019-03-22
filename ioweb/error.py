@@ -1,6 +1,9 @@
 """
 https://curl.haxx.se/libcurl/c/libcurl-errors.html
 """
+import pycurl
+
+from .pycurl_error import PYCURL_ERRNO_TAG
 
 
 class IowebError(Exception):
@@ -19,6 +22,22 @@ class NetworkError(IowebError):
             self.errmsg = args[0]
         if len(args) > 1:
             self.transport_error = args[1]
+
+    def get_tag(self):
+        if isinstance(self.transport_error, pycurl.error):
+            errno = self.transport_error.args[0]
+            errmsg = self.transport_error.args[1]
+            if (
+                    errno == 28 and (
+                        'Connection time-out' in errmsg
+                        or 'Connection timed out' in errmsg
+                    )
+                ):
+                return 'connection-timed-out'
+            else:
+                return PYCURL_ERRNO_TAG[errno]
+        else:
+            return self.transport_error.__class__.__name__.lower()
 
 
 class DataWriteError(NetworkError):
@@ -93,4 +112,4 @@ ERRNO_CLASS_MAPPING = {
 
 def build_network_error(errno, errmsg):
     cls = ERRNO_CLASS_MAPPING.get(errno, NetworkError)
-    return cls(errno, errmsg)
+    return cls(errmsg, pycurl.error(errno, errmsg))

@@ -1,4 +1,8 @@
 import pycurl
+import logging
+
+from .pycurl_hack import PycurlSigintHandler
+from .error import build_network_error
 
 """
 m['effective-url'] = self.handle.getinfo(pycurl.EFFECTIVE_URL)
@@ -35,16 +39,26 @@ m['lastsocket'] = self.handle.getinfo(pycurl.LASTSOCKET)
 m['ftp-entry-path'] = self.handle.getinfo(pycurl.FTP_ENTRY_PATH)
 """
 
-class CurlTransport(object):
+
+class PycurlTransport(object):
     __slots__ = (
         '_handler',
+        '_sigint_handler',
     )
 
     def __init__(self):
         self._handler = None
+        self._sigint_handler = PycurlSigintHandler()
 
     def prepare_request(self, req, res):
         self.handler # ensure pycurl object is created
+
+        # libcurl/pycurl is not thread-safe by default.  When multiple threads
+        # are used, signals should be disabled.  This has the side effect
+        # of disabling DNS timeouts in some environments (when libcurl is
+        # not linked against ares)
+        self._handler.setopt(pycurl.NOSIGNAL, 1)
+
         self._handler.setopt(pycurl.URL, req.config['url'])
         self._handler.setopt(
             pycurl.WRITEFUNCTION, res.write_bytes_body,
@@ -86,13 +100,24 @@ class CurlTransport(object):
             res.error = err
         else:
             if req.config['certinfo']:
-                res.certinfo = (
-                    self._handler.getinfo(pycurl.INFO_CERTINFO)
-                )
+                try:
+                    res.certinfo = (
+                        self._handler.getinfo(pycurl.INFO_CERTINFO)
+                    )
+                except UnicodeDecodeError as ex:
+                    try:
+                        res.certinfo_raw = (
+                            self._handler.getinfo_raw(pycurl.INFO_CERTINFO)
+                        )
+                    except AttributeError:
+                        logging.error(
+                            'Failed to get getinfo_raw.CERTINFO: %s' % req['url']
+                        )
             res.status = self._handler.getinfo(pycurl.HTTP_CODE)
 
     def request(self):
         try:
-            self.handler.perform()
+            with self._sigint_handler.handle_sigint():
+                self.handler.perform()
         except pycurl.error as ex:
             raise build_network_error(ex.args[0], ex.args[1])

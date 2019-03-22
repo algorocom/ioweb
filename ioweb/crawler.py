@@ -1,13 +1,24 @@
 import time
+import sys
+import logging
 from threading import Event, Thread
 from queue import Queue, Empty, Full
+from urllib.parse import urlsplit 
+import re
+import json
+from urllib.request import urlopen
+from traceback import format_exception
 
 from .util import Pause, debug
-from .loop import MultiCurlLoop
+#from .loop import MultiCurlLoop
+from .gevent_loop import GeventLoop
 from .stat import Stat
+from .request import Request
 
 
 class Crawler(object):
+    _taskgen_sleep_time = 0.01
+
     def task_generator(self):
         if False:
             yield None
@@ -16,30 +27,83 @@ class Crawler(object):
             network_threads=3,
             result_workers=4,
             retry_limit=3,
+            task_gen_api=None,
         ):
         self.taskq = Queue()
-        self.taskq_size_limit = network_threads * 2
+        self.taskq_size_limit = max(100, network_threads * 2)
         self.resultq = Queue()
         self.shutdown_event = Event()
         self.loop_pause = Pause()
         self.retry_limit = retry_limit
-        self.loop = MultiCurlLoop(
+        self.loop = GeventLoop(
             self.taskq, self.resultq,
             threads=network_threads,
             shutdown_event=self.shutdown_event,
             pause=self.loop_pause,
+            setup_handler_hook=self.setup_handler_hook,
         )
         self.result_workers = result_workers
         self.stat = Stat(speed_keys='crawler:request-processed')
+        self._run_started = None
+        self.task_gen_api = task_gen_api
+        self.fatalq = Queue()
 
-    def thread_task_generator(self):
+    def setup_handler_hook(self, transport, req):
+        pass
+
+    def submit_task(self, req):
+        self.submit_task_hook(req)
+        self.taskq.put(req)
+
+    def submit_task_hook(self, req):
+        pass
+
+    def _process_taskgen_api(self):
+        items = None
+        while True:
+            if self.shutdown_event.is_set():
+                return
+            if self.taskq.qsize() >= self.taskq_size_limit:
+                time.sleep(self._taskgen_sleep_time)
+            else:
+                if not items:
+                    # call API
+                    res = urlopen('http://%s/api/task/get?number=%d' % (
+                            self.task_gen_api,
+                            1000
+                        )).read().decode('utf-8')
+                    data = json.loads(res)
+                    if data.get('status') == 'ok':
+                        items = data['result']
+                    else:
+                        logging.error(data.get('error'))
+                        return
+                if items:
+                    item = items.pop()
+                    req = Request.from_data(item)
+                    self.submit_task(req)
+
+    def _process_taskgen_func(self):
+        sleep_time = 0.001
         for item in self.task_generator():
             while item:
+                if self.shutdown_event.is_set():
+                    return
                 if self.taskq.qsize() >= self.taskq_size_limit:
-                    time.sleep(0.1)
+                    time.sleep(self._taskgen_sleep_time)
                 else:
-                    self.taskq.put(item)
+                    self.submit_task(item)
                     item = None
+
+    def thread_task_generator(self):
+        try:
+            sleep_time = 0.01
+            if self.task_gen_api:
+                self._process_taskgen_api()
+            else:
+                self._process_taskgen_func()
+        except Exception as ex:
+            self.fatalq.put(sys.exc_info())
 
     def is_result_ok(self, req, res):
         if res.error:
@@ -57,71 +121,82 @@ class Crawler(object):
             return False
 
     def thread_result_processor(self, pause):
+        try:
+            while not self.shutdown_event.is_set():
+                if pause.pause_event.is_set():
+                    pause.process_pause()
+                try:
+                    result = self.resultq.get(True, 0.1)
+                except Empty:
+                    pass
+                else:
+                    self.stat.inc('crawler:request-processed')
+                    if (
+                            result['request']['raw']
+                            or self.is_result_ok(
+                                result['request'],
+                                result['response'],
+                            )
+                        ):
+                        self.process_ok_result(result)
+                    else:
+                        self.process_fail_result(result)
+        except Exception as ex:
+            self.fatalq.put(sys.exc_info())
+
+    def thread_fatalq_processor(self):
         while not self.shutdown_event.is_set():
-            if pause.pause_event.is_set():
-                pause.process_pause()
             try:
-                result = self.resultq.get(True, 0.1)
+                etype, evalue, tb = self.fatalq.get(True, 0.1)
             except Empty:
                 pass
             else:
-                self.stat.inc('crawler:request-processed')
-                if (
-                        result['request']['raw']
-                        or self.is_result_ok(
-                            result['request'],
-                            result['response'],
-                        )
-                    ):
-                    self.process_ok_result(result)
-                else:
-                    self.process_fail_result(result)
+                self.shutdown_event.set()
+                logging.error('Fatal exception')
+                logging.error(''.join(format_exception(etype, evalue, tb)))
 
     def thread_manager(self, th_task_gen, pauses):
-        th_task_gen.join()
+        try:
+            th_task_gen.join()
 
-        def system_is_busy():
-            return (
-                self.taskq.qsize()
-                or self.resultq.qsize()
-                or len(self.loop.active_handlers)
-            )
+            def system_is_busy():
+                return (
+                    self.taskq.qsize()
+                    or self.resultq.qsize()
+                    or len(self.loop.active_handlers)
+                )
 
-        while True:
-            #debug('-- thread_manager: start loop')
-            # wait till nothing is busy
-            while system_is_busy():
-                #debug('-- thread manager: system is busy')
-                #debug('-- thread_manager: taskq.qsize = %d', self.taskq.qsize())
-                #debug('-- thread_manager: resultq.qsize = %d', self.resultq.qsize())
-                #debug('-- thread_manager: loop.active_handlers = %d', len(self.loop.active_handlers))
-                time.sleep(0.5)
+            while not self.shutdown_event.is_set():
+                while system_is_busy():
+                    if self.shutdown_event.is_set():
+                        return
+                    time.sleep(0.1)
 
-            for pause in pauses:
-                pause.pause_event.set()
-            ok = True
-            for pause in pauses:
-                if not pause.is_paused.wait(0.5):
-                    ok = False
-                    break
-            if not ok:
                 for pause in pauses:
-                    pause.pause_event.clear()
-                    pause.resume_event.set()
-            else:
-                if not system_is_busy():
+                    pause.pause_event.set()
+                ok = True
+                for pause in pauses:
+                    if not pause.is_paused.wait(0.1):
+                        ok = False
+                        break
+                if not ok:
                     for pause in pauses:
                         pause.pause_event.clear()
                         pause.resume_event.set()
-                    print('SHUTDOWN SIGNALS IS SET')
-                    self.shutdown_event.set()
-                    return
+                else:
+                    if not system_is_busy():
+                        for pause in pauses:
+                            pause.pause_event.clear()
+                            pause.resume_event.set()
+                        self.shutdown_event.set()
+                        return
+        except Exception as ex:
+            self.fatalq.put(sys.exc_info())
 
     def process_ok_result(self, result):
         self.stat.inc('crawler:request-ok')
         name = result['request'].config['name']
         handler = getattr(self, 'handler_%s' % name)
-        # TODO: curl have to put response data in Response object
         handler_result = handler(
             result['request'],
             result['response'],
@@ -135,42 +210,124 @@ class Crawler(object):
                 print('Processing handler result: %s' % item)
 
     def process_fail_result(self, result):
+        self.stat.inc('crawler:request-fail')
         req = result['request']
+
+        if result['response'].error:
+            self.stat.inc('network-error:%s' % result['response'].error.get_tag())
+        if result['response'].status:
+            self.stat.inc('http:status-%s' % result['response'].status)
+
         if req.retry_count + 1 <= self.retry_limit:
             self.stat.inc('crawler:request-retry')
             req.retry_count += 1
-            self.taskq.put(req)
+            self.submit_task(req)
         else:
-            self.stat.inc('crawler:request-fail')
+            self.stat.inc('crawler:request-rejected')
             name = result['request'].config['name']
-            print('[FAIL] request to %s' % result['request'].config['url'])
+            handler = getattr(self, 'rejected_%s' % name, None)
+            if handler is None:
+                handler = self.default_rejected_handler
+            handler(result['request'], result['response'])
+
+    def default_rejected_handler(self, req, res):
+        pass
 
     def prepare(self):
         pass
 
+    def thread_stat(self):
+        try:
+            while not self.shutdown_event.is_set():
+                stat = []
+                now = time.time()
+                for hdl in self.loop.active_handlers:
+                    stat.append((hdl, self.loop.registry[hdl]['start']))
+                with open('var/crawler.stat', 'w') as out:
+                    for hdl, start in list(sorted(stat, key=lambda x: (x[1] or now), reverse=True)):
+                        req = self.loop.registry[hdl]['request']
+                        out.write('%.2f - [#%s] - %s\n' % (
+                            (now - start) if start else 0,
+                            req.retry_count if req else 'NA',
+                            urlsplit(req['url']).netloc if req else 'NA',
+                        ))
+                    out.write('Active handlers: %d\n' % len(self.loop.active_handlers))
+                    out.write('Idle handlers: %d\n' % len(self.loop.idle_handlers))
+                    out.write('Taskq size: %d\n' % self.taskq.qsize())
+                    out.write('Resultq size: %d\n' % self.resultq.qsize())
+
+                total = 0
+                count = 0
+                for hdl, start in stat:
+                    if start:
+                        total += (now - start)
+                        count += 1
+                logging.debug('Mean handler time: %.2f' % ((total / count) if count else 0))
+
+                self.shutdown_event.wait(3)
+        except Exception as ex:
+            self.fatalq.put(sys.exc_info())
+
+    def shutdown(self):
+        self.shutdown_hook()
+
+    def shutdown_hook(self):
+        pass
+
     def run(self):
         self.prepare()
+        try:
+            self._run_started = time.time()
 
-        th_task_gen = Thread(target=self.thread_task_generator)
-        th_task_gen.start()
+            th_fatalq_proc = Thread(target=self.thread_fatalq_processor)
+            th_fatalq_proc.start()
 
-        pauses = [self.loop_pause]
-        result_workers = []
-        for _ in range(self.result_workers):
-            pause = Pause()
-            th = Thread(
-                target=self.thread_result_processor,
-                args=[pause],
-            ) 
-            pauses.append(pause)
-            th.start()
-            result_workers.append(th)
+            th_task_gen = Thread(target=self.thread_task_generator)
+            th_task_gen.start()
 
-        th_manager = Thread(
-            target=self.thread_manager,
-            args=[th_task_gen, pauses],
-        )
-        th_manager.start()
 
-        # `loop.run` is stopped by `th_manager`
-        self.loop.run()
+            th_stat = Thread(target=self.thread_stat)
+            th_stat.start()
+
+
+            pauses = [self.loop_pause]
+            result_workers = []
+            for _ in range(self.result_workers):
+                pause = Pause()
+                th = Thread(
+                    target=self.thread_result_processor,
+                    args=[pause],
+                ) 
+                pauses.append(pause)
+                th.start()
+                result_workers.append(th)
+
+            th_manager = Thread(
+                target=self.thread_manager,
+                args=[th_task_gen, pauses],
+            )
+            th_manager.start()
+
+
+            th_loop = Thread(
+                target=self.loop.run
+            )
+            th_loop.start()
+
+            #def force_shutdown():
+            #    if not self.shutdown_event.wait(5):
+            #        print('Forcing shutdown')
+            #        self.shutdown_event.set()
+
+            #Thread(target=force_shutdown).start()
+
+            try:
+                th_manager.join()
+                th_fatalq_proc.join()
+                th_task_gen.join()
+                th_stat.join()
+                [x.join() for x in result_workers]
+            except KeyboardInterrupt:
+                self.shutdown_event.set()
+        finally:
+            self.shutdown()

@@ -20,9 +20,13 @@ setup(
     entry_points = {
         'console_scripts': [
             'crawl=ioweb.cli:run_command_crawl',
+            'taskgen=ioweb.cli:run_command_taskgen',
         ],
     },
-    #install_requires = ['six'],
+    install_requires = [
+        'urllib3==1.24.1',
+        'cachetools',
+    ],
     keywords='web scraping network crawling cralwer spider pycurl',
     classifiers = [
         'Programming Language :: Python',

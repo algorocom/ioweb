@@ -21,6 +21,7 @@ class Request(object):
             'connect_timeout': 5,
             'resolve': None,
             'raw': False,
+            'headers': None,
         }
 
     def setup(self, **kwargs):
@@ -28,10 +29,27 @@ class Request(object):
             assert key in (
                 'meta', 'name', 'url',
                 'max_redirects', 'certinfo',
-                'timeout', 'resolve',
-                'raw', 'headers'
+                'timeout', 'connect_timeout',
+                'resolve', 'raw', 'headers',
             ), 'Invalid configuration key: %s' % key
             self.config[key] = kwargs[key]
 
     def __getitem__(self, key):
         return self.config[key]
+
+    def as_data(self):
+        return {
+            'config': self.config,
+            'retry_count': self.retry_count,
+            'meta': self.meta,
+        }
+
+    @classmethod
+    def from_data(cls, data):
+        req = Request()
+        for key in ('config', 'retry_count', 'meta'):
+            setattr(req, key, data[key])
+        return req
+
+    def method(self):
+        return 'GET'

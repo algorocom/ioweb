@@ -14,6 +14,7 @@ class Response(object):
         '_bytes_body',
         '_cached',
         'certinfo',
+        'certinfo_raw',
         'status',
         'error',
     )
@@ -26,6 +27,7 @@ class Response(object):
             'text_headers': None,
         }
         self.certinfo = None
+        self.certinfo_raw = None
         self.status = None
         self.error = None
 

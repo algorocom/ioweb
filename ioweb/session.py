@@ -2,13 +2,14 @@ from pprint import pprint
 
 from .response import Response
 from .request import Request
-from .transport import CurlTransport
+from .pycurl_transport import PycurlTransport
+from .error import NetworkError
 
 
 class Session(object):
     def __init__(self):
         self.req = Request()
-        self.transport = CurlTransport()
+        self.transport = PycurlTransport()
 
     def setup(self, **kwargs):
         self.req.setup(**kwargs)

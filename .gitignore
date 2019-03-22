@@ -12,3 +12,4 @@
 /var/
 /dist/
 .pytest_cache
+/.hg/
