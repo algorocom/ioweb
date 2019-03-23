@@ -5,16 +5,12 @@ try:
 except ImportError:
     import json
 
-import pycurl
-
-
 class Response(object):
     __slots__ = (
         '_bytes_headers',
         '_bytes_body',
         '_cached',
-        'certinfo',
-        'certinfo_raw',
+        'cert',
         'status',
         'error',
     )
@@ -26,8 +22,7 @@ class Response(object):
             'parsed_headers': None,
             'text_headers': None,
         }
-        self.certinfo = None
-        self.certinfo_raw = None
+        self.cert = None
         self.status = None
         self.error = None
 
@@ -92,3 +87,17 @@ class Response(object):
     @property
     def json(self):
         return json.loads(self.text)
+
+    @property
+    def cert_pem(self):
+        from urllib3.contrib import pyopenssl
+        if self.cert:
+            return [
+                pyopenssl.OpenSSL.crypto.dump_certificate(
+                        pyopenssl.OpenSSL.crypto.FILETYPE_PEM,
+                        item
+                    ).decode('latin')
+                for item in self.cert
+            ]
+        else:
+            return None

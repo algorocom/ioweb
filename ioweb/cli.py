@@ -89,7 +89,7 @@ def get_crawler(crawler_id):
     reg = collect_crawlers()
     if crawler_id not in reg:
         sys.stderr.write(
-            'Could not load %s crawler\n' % opts.crawler_id
+            'Could not load %s crawler\n' % crawler_id
         )
         sys.exit(1)
     else:

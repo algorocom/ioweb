@@ -25,6 +25,10 @@ setup(
     },
     install_requires = [
         'urllib3==1.24.1',
+        'pyopenssl',
+        'cryptography',
+        'idna',
+        'certifi',
         'cachetools',
     ],
     keywords='web scraping network crawling cralwer spider pycurl',

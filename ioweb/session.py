@@ -2,14 +2,14 @@ from pprint import pprint
 
 from .response import Response
 from .request import Request
-from .pycurl_transport import PycurlTransport
+from .urllib3_transport import Urllib3Transport
 from .error import NetworkError
 
 
 class Session(object):
     def __init__(self):
         self.req = Request()
-        self.transport = PycurlTransport()
+        self.transport = Urllib3Transport()
 
     def setup(self, **kwargs):
         self.req.setup(**kwargs)
@@ -19,7 +19,7 @@ class Session(object):
         res = Response()
         self.transport.prepare_request(self.req, res)
         try:
-            self.transport.request()
+            self.transport.request(self.req, res)
         except NetworkError as ex:
             err = ex
         else:

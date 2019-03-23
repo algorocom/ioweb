@@ -1,4 +1,3 @@
-import pycurl
 from queue import Empty
 import time
 import sys
@@ -12,8 +11,7 @@ import gevent
 from .urllib3_transport import Urllib3Transport
 from .util import debug
 from .response import Response
-from .error import NetworkError, build_network_error
-from .pycurl_hack import PycurlSigintHandler
+from .error import NetworkError
 from .urllib3_custom import CustomPoolManager
 
 network_logger = logging.getLogger('ioweb.network')
