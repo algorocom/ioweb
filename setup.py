@@ -3,6 +3,9 @@ import os
 
 ROOT = os.path.dirname(os.path.realpath(__file__))
 
+with open('README.md') as inp:
+    readme_content = inp.read()
+
 setup(
     name = 'ioweb',
     version = '0.0.1',
@@ -12,8 +15,8 @@ setup(
     maintainer_email='lorien@lorien.name',
     url='https://github.com/lorien/ioweb',
     description = 'Web Scraping Framework',
-    #long_description = readme_content,
-    #long_description_content_type='text/markdown',
+    long_description = readme_content,
+    long_description_content_type='text/markdown',
     packages = find_packages(exclude=['test']),
     download_url='https://github.com/lorien/ioweb/releases',
     license = "MIT",
