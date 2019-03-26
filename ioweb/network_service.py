@@ -137,7 +137,9 @@ class NetworkService(object):
                 return
             else:
                 error = None
-            transport.prepare_response(req, res, error)
+            transport.prepare_response(
+                req, res, error, raise_network_error=False
+            )
             self.resultq.put({
                 'request': req,
                 'response': res,

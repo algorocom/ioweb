@@ -50,6 +50,8 @@ class Urllib3Transport(object):
             raise error.ConnectError(str(ex), ex)
         except exceptions.LocationParseError as ex:
             raise error.MalformedResponseError(str(ex), ex)
+        except exceptions.DecodeError as ex:
+            raise error.MalformedResponseError(str(ex), ex)
         except AttributeError:
             # See https://github.com/urllib3/urllib3/issues/1556
             etype, evalue, tb = sys.exc_info()
@@ -110,7 +112,7 @@ class Urllib3Transport(object):
                     chunk_limit = len(chunk)
                 res._bytes_body.write(chunk[:chunk_limit])
                 bytes_read += chunk_limit
-                if bytes_read >= read_limit:
+                if read_limit and bytes_read >= read_limit:
                     break
             else:
                 break
@@ -119,16 +121,12 @@ class Urllib3Transport(object):
                     'Timed out while reading response',
                 )
 
-    def prepare_response(self, req, res, err):
+    def prepare_response(self, req, res, err, raise_network_error=True):
         try:
             if err:
                 res.error = err
             else:
                 try:
-                    #headers = {}
-                    #for key, val in self.urllib3_response.getheaders().items():
-                    #    headers[key.lower()] = val
-                    #res._cached['parsed_headers'] = headers
                     res.headers = self.urllib3_response.headers
                     res.status = self.urllib3_response.status
 
@@ -141,7 +139,10 @@ class Urllib3Transport(object):
                     with self.handle_network_error():
                         self.read_with_timeout(req, res)
                 except error.NetworkError as ex:
-                    res.error = err
+                    if raise_network_error:
+                        raise
+                    else:
+                        res.error = err
         finally:
             if self.urllib3_response:
                 self.urllib3_response.release_conn()
