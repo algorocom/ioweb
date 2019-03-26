@@ -105,11 +105,13 @@ class Urllib3Transport(object):
             chunk = self.urllib3_response.read(chunk_size)
             if chunk:
                 if read_limit:
-                    chunk_limit = read_limit - bytes_read
+                    chunk_limit = min(len(chunk), read_limit - bytes_read)
                 else:
                     chunk_limit = len(chunk)
                 res._bytes_body.write(chunk[:chunk_limit])
                 bytes_read += chunk_limit
+                if bytes_read >= read_limit:
+                    break
             else:
                 break
             if time.time() - self.op_started > req['timeout']:
