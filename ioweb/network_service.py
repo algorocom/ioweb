@@ -4,38 +4,48 @@ import sys
 import logging
 from collections import deque
 from threading import Thread
+from uuid import uuid4
+import traceback
 
 from urllib3 import PoolManager
 import gevent
 
-from .urllib3_transport import Urllib3Transport
+from .transport import Urllib3Transport
 from .util import debug
 from .response import Response
 from .error import NetworkError
 from .urllib3_custom import CustomPoolManager
 
-network_logger = logging.getLogger('ioweb.network')
+network_logger = logging.getLogger(__name__)
 
 
-class GeventLoop(object):
+class NetworkService(object):
     def __init__(
-            self, taskq, resultq, threads=3, resultq_size_limit=None,
+            self,
+            taskq,
+            resultq,
+            resultq_size_limit=None,
+            threads=3,
             shutdown_event=None,
             pause=None,
-            setup_handler_hook=None
+            setup_handler_hook=None,
+            stat=None,
         ):
-        if resultq_size_limit is None:
-            resultq_size_limit = threads * 2
-        self.setup_handler_hook = setup_handler_hook
+        # Input arguments
         self.taskq = taskq
         self.resultq = resultq
+        if resultq_size_limit is None:
+            resultq_size_limit = threads * 2
         self.resultq_size_limit = resultq_size_limit
+        self.threads = threads
+        self.shutdown_event = shutdown_event
+        self.pause = pause
+        self.setup_handler_hook = setup_handler_hook
+        self.stat = stat
+        # Init logic
         self.idle_handlers = set()
         self.active_handlers = set()
         self.registry = {}
-        self.shutdown_event = shutdown_event
-        self.pause = pause
-        self.threads = threads
         self.pool = CustomPoolManager()
         for _ in range(threads):
             ref = object()
@@ -117,15 +127,28 @@ class GeventLoop(object):
             except NetworkError as ex:
                 #logging.exception('asdf')
                 error = ex
+            except Exception as ex:
+                logging.exception('Unexpected failure in network request')
+                self.stat.inc('unexpected-network-exception')
+                uid = uuid4()
+                with open('var/fatal-%s.txt' % uid, 'w') as out:
+                    out.write('URL: %s\n' % req['url'])
+                    out.write(traceback.format_exc() + '\n')
+                return
             else:
                 error = None
-            self.handle_completed_request(
-                ref,
-                transport,
-                req,
-                res,
-                error
-            )
+            transport.prepare_response(req, res, error)
+            self.resultq.put({
+                'request': req,
+                'response': res,
+            })
+        except Exception as ex:
+            logging.exception('Unexpected failure in preparing network response')
+            self.stat.inc('unexpected-network-exception')
+            uid = uuid4()
+            with open('var/fatal-%s.txt' % uid, 'w') as out:
+                out.write('URL: %s\n' % req['url'])
+                out.write(traceback.format_exc() + '\n')
         finally:
             self.free_handler(ref)
 
@@ -135,10 +158,3 @@ class GeventLoop(object):
         self.registry[ref]['request'] = None
         self.registry[ref]['response'] = None
         self.registry[ref]['start'] = None
-
-    def handle_completed_request(self, ref, transport, req, res, err):
-        transport.prepare_response(req, res, err)
-        self.resultq.put({
-            'request': req,
-            'response': res,
-        })

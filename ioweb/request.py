@@ -22,6 +22,9 @@ class Request(object):
             'resolve': None,
             'raw': False,
             'headers': None,
+            'content_encoding': 'gzip,chunked', 
+            'decode_content': True,
+            'content_read_limit': None,
         }
 
     def setup(self, **kwargs):
@@ -31,6 +34,8 @@ class Request(object):
                 'max_redirects', 'certinfo',
                 'timeout', 'connect_timeout',
                 'resolve', 'raw', 'headers',
+                'content_encoding', 'decode_content',
+                'content_read_limit',
             ), 'Invalid configuration key: %s' % key
             self.config[key] = kwargs[key]
 

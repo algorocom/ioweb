@@ -1,6 +1,16 @@
 from gevent import monkey
 monkey.patch_all()#thread=False)
 
+try:
+    import grpc
+except ImportError:
+    pass
+else:
+    if grpc.__version__ != '1.18.0':
+        raise Exception('grpcio version must be 1.18.0')
+    from grpc.experimental import gevent
+    gevent.init_gevent()
+
 import sys
 import re
 import time
@@ -71,7 +81,7 @@ def setup_logging(network_logs=False):#, control_logs=False):
     logging.getLogger('urllib3.connectionpool').setLevel(level=logging.ERROR)
     logging.getLogger('ioweb.urllib3_custom').setLevel(level=logging.ERROR)
     if not network_logs:
-        logging.getLogger('ioweb.network').propagate = False
+        logging.getLogger('ioweb.network_service').propagate = False
     #if not control_logs:
     #    logging.getLogger('crawler.control').propagate = False
 
@@ -81,7 +91,7 @@ def format_elapsed_time(total_sec):
     if total_sec > 3600:
         hours, total_sec = divmod(total_sec, 3600)
     if total_sec > 60:
-        minutes, total_sec = divmod(total_sec, 3600)
+        minutes, total_sec = divmod(total_sec, 60)
     return '%02d:%02d:%.2f' % (hours, minutes, total_sec)
 
 
@@ -102,7 +112,6 @@ def run_command_crawl():
     parser.add_argument('-t', '--network-threads', type=int, default=1)
     parser.add_argument('-n', '--network-logs', action='store_true', default=False)
     parser.add_argument('-p', '--profile', action='store_true', default=False)
-    parser.add_argument('--task-gen-api', type=str)
     #parser.add_argument('--control-logs', action='store_true', default=False)
     opts = parser.parse_args()
 
@@ -111,7 +120,6 @@ def run_command_crawl():
     cls = get_crawler(opts.crawler_id)
     bot = cls(
         network_threads=opts.network_threads,
-        task_gen_api=opts.task_gen_api
     )
     try:
         if opts.profile:
@@ -140,46 +148,3 @@ def run_command_crawl():
         print('Elapsed: %s' % format_elapsed_time(time.time() - bot._run_started))
     else:
         print('Elapsed: NA')
-
-
-
-
-def run_command_taskgen():
-    parser = ArgumentParser()
-    parser.add_argument('crawler_id')
-    opts = parser.parse_args()
-
-    cls = get_crawler(opts.crawler_id)
-    bot = cls()
-    bot.prepare()
-    task_gen = bot.task_generator()
-
-    from bottle import run, Bottle, request
-
-    app = Bottle()
-
-    @app.route('/api/task/get')
-    def page_task_get():
-        try:
-            num_tasks = int(request.query.number or '')
-        except ValueError:
-            num_tasks = 100
-
-        count = 0
-        items = []
-        stop_event = False
-        while count < num_tasks:
-            try:
-                item = next(task_gen)
-            except StopIteration:
-                stop_event = True
-                break
-            else:
-                items.append(item.as_data())
-                count += 1
-        if not items and stop_event:
-            return {'status': 'fail', 'error': {'code': 'stop-iteration'}}
-        else:
-            return {'status': 'ok', 'result': items} 
-
-    run(app, port='8887')

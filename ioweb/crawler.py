@@ -1,23 +1,30 @@
 import time
 import sys
 import logging
-from threading import Event, Thread
+from threading import Event, Thread, Lock
 from queue import Queue, Empty, Full
 from urllib.parse import urlsplit 
 import re
 import json
 from urllib.request import urlopen
 from traceback import format_exception
+from collections import defaultdict
 
 from .util import Pause, debug
 #from .loop import MultiCurlLoop
-from .gevent_loop import GeventLoop
+from .network_service import NetworkService
 from .stat import Stat
 from .request import Request
 
 
 class Crawler(object):
     _taskgen_sleep_time = 0.01
+    dataop_threshold_default = {
+        'number': 500,
+        'size': None,
+        #'time': None,
+    }
+    dataop_threshold = {}
 
     def task_generator(self):
         if False:
@@ -27,26 +34,84 @@ class Crawler(object):
             network_threads=3,
             result_workers=4,
             retry_limit=3,
-            task_gen_api=None,
         ):
         self.taskq = Queue()
         self.taskq_size_limit = max(100, network_threads * 2)
         self.resultq = Queue()
         self.shutdown_event = Event()
-        self.loop_pause = Pause()
+        self.network_pause = Pause()
         self.retry_limit = retry_limit
-        self.loop = GeventLoop(
+        self.stat = Stat(speed_keys='crawler:request-processed')
+        self.fatalq = Queue()
+        self.network = NetworkService(
             self.taskq, self.resultq,
             threads=network_threads,
             shutdown_event=self.shutdown_event,
-            pause=self.loop_pause,
+            pause=self.network_pause,
             setup_handler_hook=self.setup_handler_hook,
+            stat=self.stat,
         )
         self.result_workers = result_workers
-        self.stat = Stat(speed_keys='crawler:request-processed')
         self._run_started = None
-        self.task_gen_api = task_gen_api
-        self.fatalq = Queue()
+
+        self.dataopq = {}
+        self.dataop_lock = defaultdict(Lock)
+        self.dataop_counters = defaultdict(lambda: {
+            'number': 0,
+            'size': 0,
+        })
+
+        self.init_hook()
+
+    def is_dataopq_dump_time(self, name):
+        to_dump = False
+        try:
+            number_th = self.dataop_threshold[name]['number']
+        except KeyError:
+            number_th = self.dataop_threshold_default['number']
+        if number_th:
+            if self.dataop_counters[name]['number'] >= number_th:
+                    to_dump = True
+        if not to_dump:
+            try:
+                size_th = self.dataop_threshold[name]['size']
+            except KeyError:
+                size_th = self.dataop_threshold_default['size']
+            if size_th:
+                if self.dataop_counters[name]['size'] >= size_th:
+                    to_dump = True
+        return to_dump
+
+    def enq_dataop(self, name, op, size=None, force_dump=False):
+        self.dataop_lock[name].acquire()
+        released = False
+        try:
+            self.dataopq.setdefault(name, [])
+            if op:
+                self.dataopq[name].append(op)
+                self.dataop_counters[name]['number'] += 1
+                if size:
+                    self.dataop_counters[name]['size'] += size
+
+            if force_dump or self.is_dataopq_dump_time(name):
+            #if not len(self.dataopq[name]) % 500:
+            #    logging.debug('Size of %s docs: %d' % (len(self.dataopq[name]), size))
+                logging.debug('Dumping data ops')
+                ops = self.dataopq[name]
+                self.dataopq[name] = []
+                self.dataop_counters[name]['number'] = 0
+                self.dataop_counters[name]['size'] = 0
+                self.dataop_lock[name].release()
+                released = True
+                func = getattr(self, 'dataop_handler_%s' % name)
+                func(ops)
+        finally:
+            if not released:
+                self.dataop_lock[name].release()
+
+
+    def init_hook(self):
+        pass
 
     def setup_handler_hook(self, transport, req):
         pass
@@ -58,50 +123,18 @@ class Crawler(object):
     def submit_task_hook(self, req):
         pass
 
-    def _process_taskgen_api(self):
-        items = None
-        while True:
-            if self.shutdown_event.is_set():
-                return
-            if self.taskq.qsize() >= self.taskq_size_limit:
-                time.sleep(self._taskgen_sleep_time)
-            else:
-                if not items:
-                    # call API
-                    res = urlopen('http://%s/api/task/get?number=%d' % (
-                            self.task_gen_api,
-                            1000
-                        )).read().decode('utf-8')
-                    data = json.loads(res)
-                    if data.get('status') == 'ok':
-                        items = data['result']
-                    else:
-                        logging.error(data.get('error'))
-                        return
-                if items:
-                    item = items.pop()
-                    req = Request.from_data(item)
-                    self.submit_task(req)
-
-    def _process_taskgen_func(self):
-        sleep_time = 0.001
-        for item in self.task_generator():
-            while item:
-                if self.shutdown_event.is_set():
-                    return
-                if self.taskq.qsize() >= self.taskq_size_limit:
-                    time.sleep(self._taskgen_sleep_time)
-                else:
-                    self.submit_task(item)
-                    item = None
-
     def thread_task_generator(self):
         try:
-            sleep_time = 0.01
-            if self.task_gen_api:
-                self._process_taskgen_api()
-            else:
-                self._process_taskgen_func()
+            #sleep_time = 0.01
+            for item in self.task_generator():
+                while item:
+                    if self.shutdown_event.is_set():
+                        return
+                    if self.taskq.qsize() >= self.taskq_size_limit:
+                        time.sleep(self._taskgen_sleep_time)
+                    else:
+                        self.submit_task(item)
+                        item = None
         except Exception as ex:
             self.fatalq.put(sys.exc_info())
 
@@ -163,7 +196,7 @@ class Crawler(object):
                 return (
                     self.taskq.qsize()
                     or self.resultq.qsize()
-                    or len(self.loop.active_handlers)
+                    or len(self.network.active_handlers)
                 )
 
             while not self.shutdown_event.is_set():
@@ -241,18 +274,18 @@ class Crawler(object):
             while not self.shutdown_event.is_set():
                 stat = []
                 now = time.time()
-                for hdl in self.loop.active_handlers:
-                    stat.append((hdl, self.loop.registry[hdl]['start']))
+                for hdl in self.network.active_handlers:
+                    stat.append((hdl, self.network.registry[hdl]['start']))
                 with open('var/crawler.stat', 'w') as out:
                     for hdl, start in list(sorted(stat, key=lambda x: (x[1] or now), reverse=True)):
-                        req = self.loop.registry[hdl]['request']
+                        req = self.network.registry[hdl]['request']
                         out.write('%.2f - [#%s] - %s\n' % (
                             (now - start) if start else 0,
                             req.retry_count if req else 'NA',
                             urlsplit(req['url']).netloc if req else 'NA',
                         ))
-                    out.write('Active handlers: %d\n' % len(self.loop.active_handlers))
-                    out.write('Idle handlers: %d\n' % len(self.loop.idle_handlers))
+                    out.write('Active handlers: %d\n' % len(self.network.active_handlers))
+                    out.write('Idle handlers: %d\n' % len(self.network.idle_handlers))
                     out.write('Taskq size: %d\n' % self.taskq.qsize())
                     out.write('Resultq size: %d\n' % self.resultq.qsize())
 
@@ -262,13 +295,22 @@ class Crawler(object):
                     if start:
                         total += (now - start)
                         count += 1
-                logging.debug('Mean handler time: %.2f' % ((total / count) if count else 0))
+                logging.debug('Median handler time: %.2f' % ((total / count) if count else 0))
 
                 self.shutdown_event.wait(3)
         except Exception as ex:
             self.fatalq.put(sys.exc_info())
 
+
+    def thread_network(self):
+        try:
+            self.network.run()
+        except Exception as ex:
+            self.fatalq.put(sys.exc_info())
+
     def shutdown(self):
+        for name in self.dataopq.keys():
+            self.enq_dataop(name, None, force_dump=True)
         self.shutdown_hook()
 
     def shutdown_hook(self):
@@ -290,7 +332,7 @@ class Crawler(object):
             th_stat.start()
 
 
-            pauses = [self.loop_pause]
+            pauses = [self.network_pause]
             result_workers = []
             for _ in range(self.result_workers):
                 pause = Pause()
@@ -309,10 +351,10 @@ class Crawler(object):
             th_manager.start()
 
 
-            th_loop = Thread(
-                target=self.loop.run
+            th_network = Thread(
+                target=self.thread_network,
             )
-            th_loop.start()
+            th_network.start()
 
             #def force_shutdown():
             #    if not self.shutdown_event.wait(5):

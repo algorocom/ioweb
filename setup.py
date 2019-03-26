@@ -23,7 +23,6 @@ setup(
     entry_points = {
         'console_scripts': [
             'crawl=ioweb.cli:run_command_crawl',
-            'taskgen=ioweb.cli:run_command_taskgen',
         ],
     },
     install_requires = [

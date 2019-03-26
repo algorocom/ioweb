@@ -2,7 +2,7 @@ from pprint import pprint
 
 from .response import Response
 from .request import Request
-from .urllib3_transport import Urllib3Transport
+from .transport import Urllib3Transport
 from .error import NetworkError
 
 
@@ -18,11 +18,6 @@ class Session(object):
         self.setup(url=url, **kwargs)
         res = Response()
         self.transport.prepare_request(self.req, res)
-        try:
-            self.transport.request(self.req, res)
-        except NetworkError as ex:
-            err = ex
-        else:
-            err = None
-        self.transport.prepare_response(self.req, res, err)
+        self.transport.request(self.req, res)
+        self.transport.prepare_response(self.req, res, None)
         return res

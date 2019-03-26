@@ -1,12 +1,15 @@
 import logging
 import time
 from contextlib import contextmanager
+import traceback
+import sys
 
 from urllib3.util.retry import Retry
 from urllib3.util.timeout import Timeout
 from urllib3 import exceptions
 from  urllib3.contrib import pyopenssl
 import urllib3
+import OpenSSL.SSL
 
 from . import error
 from .urllib3_custom import CustomPoolManager
@@ -43,6 +46,26 @@ class Urllib3Transport(object):
             raise error.ConnectError(str(ex), ex)
         except exceptions.SSLError as ex:
             raise error.ConnectError(str(ex), ex)
+        except OpenSSL.SSL.Error as ex:
+            raise error.ConnectError(str(ex), ex)
+        except exceptions.LocationParseError as ex:
+            raise error.MalformedResponseError(str(ex), ex)
+        except AttributeError:
+            # See https://github.com/urllib3/urllib3/issues/1556
+            etype, evalue, tb = sys.exc_info()
+            frames = traceback.extract_tb(tb)
+            found = False
+            for frame in frames:
+                if (
+                        "if host.startswith('[')" in frame.line
+                        and 'connectionpool.py' in frame.filename
+                    ):
+                    found = True
+                    break
+            if found:
+                raise error.MalformedResponseError('Invalid redirect header')
+            else:
+                raise
 
 
     def request(self, req, res):
@@ -50,11 +73,15 @@ class Urllib3Transport(object):
         if req['resolve']:
             for host, ip in req['resolve'].items():
                 self.pool.resolving_cache[host] = ip
+        headers = req['headers'] or {}
+        if req['content_encoding']:
+            if not any(x.lower() == 'accept-encoding' for x in headers):
+                headers['accept-encoding'] = req['content_encoding']
         with self.handle_network_error():
             self.urllib3_response = self.pool.urlopen(
                 req.method(),
                 req['url'],
-                headers=(req['headers'] or {}),
+                headers=headers,
                 retries=Retry(
                     total=False,
                     connect=False,
@@ -67,14 +94,22 @@ class Urllib3Transport(object):
                     read=req['timeout'],
                 ),
                 preload_content=False,
+                decode_content=req['decode_content'],
             )
 
     def read_with_timeout(self, req, res):
+        read_limit = req['content_read_limit']
         chunk_size = 1024
+        bytes_read = 0
         while True:
             chunk = self.urllib3_response.read(chunk_size)
             if chunk:
-                res._bytes_body.write(chunk)
+                if read_limit:
+                    chunk_limit = read_limit - bytes_read
+                else:
+                    chunk_limit = len(chunk)
+                res._bytes_body.write(chunk[:chunk_limit])
+                bytes_read += chunk_limit
             else:
                 break
             if time.time() - self.op_started > req['timeout']:
@@ -88,10 +123,11 @@ class Urllib3Transport(object):
                 res.error = err
             else:
                 try:
-                    headers = {}
-                    for key, val in self.urllib3_response.getheaders().items():
-                        headers[key.lower()] = val
-                    res._cached['parsed_headers'] = headers
+                    #headers = {}
+                    #for key, val in self.urllib3_response.getheaders().items():
+                    #    headers[key.lower()] = val
+                    #res._cached['parsed_headers'] = headers
+                    res.headers = self.urllib3_response.headers
                     res.status = self.urllib3_response.status
 
                     if hasattr(self.urllib3_response._connection.sock, 'connection'):

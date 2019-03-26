@@ -99,6 +99,12 @@ class InvalidUrlError(NetworkError):
     """
 
 
+class MalformedResponseError(NetworkError):
+    """
+    Raised when parser fails to parse response HTTP headers
+    """
+
+
 ERRNO_CLASS_MAPPING = {
     3: InvalidUrlError,
     6: ResolveHostError,
