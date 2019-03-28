@@ -9,7 +9,10 @@ import json
 from urllib.request import urlopen
 from traceback import format_exception
 from collections import defaultdict
+import gc
 
+import greenlet
+import gevent
 from .util import Pause, debug
 #from .loop import MultiCurlLoop
 from .network_service import NetworkService
@@ -272,30 +275,30 @@ class Crawler(object):
     def thread_stat(self):
         try:
             while not self.shutdown_event.is_set():
-                stat = []
-                now = time.time()
-                for hdl in self.network.active_handlers:
-                    stat.append((hdl, self.network.registry[hdl]['start']))
-                with open('var/crawler.stat', 'w') as out:
-                    for hdl, start in list(sorted(stat, key=lambda x: (x[1] or now), reverse=True)):
-                        req = self.network.registry[hdl]['request']
-                        out.write('%.2f - [#%s] - %s\n' % (
-                            (now - start) if start else 0,
-                            req.retry_count if req else 'NA',
-                            urlsplit(req['url']).netloc if req else 'NA',
-                        ))
-                    out.write('Active handlers: %d\n' % len(self.network.active_handlers))
-                    out.write('Idle handlers: %d\n' % len(self.network.idle_handlers))
-                    out.write('Taskq size: %d\n' % self.taskq.qsize())
-                    out.write('Resultq size: %d\n' % self.resultq.qsize())
+                #stat = []
+                #now = time.time()
+                #for hdl in self.network.active_handlers:
+                #    stat.append((hdl, self.network.registry[hdl]['start']))
+                #with open('var/crawler.stat', 'w') as out:
+                #    for hdl, start in list(sorted(stat, key=lambda x: (x[1] or now), reverse=True)):
+                #        req = self.network.registry[hdl]['request']
+                #        out.write('%.2f - [#%s] - %s\n' % (
+                #            (now - start) if start else 0,
+                #            req.retry_count if req else 'NA',
+                #            urlsplit(req['url']).netloc if req else 'NA',
+                #        ))
+                #    out.write('Active handlers: %d\n' % len(self.network.active_handlers))
+                #    out.write('Idle handlers: %d\n' % len(self.network.idle_handlers))
+                #    out.write('Taskq size: %d\n' % self.taskq.qsize())
+                #    out.write('Resultq size: %d\n' % self.resultq.qsize())
 
-                total = 0
-                count = 0
-                for hdl, start in stat:
-                    if start:
-                        total += (now - start)
-                        count += 1
-                logging.debug('Median handler time: %.2f' % ((total / count) if count else 0))
+                #total = 0
+                #count = 0
+                #for hdl, start in stat:
+                #    if start:
+                #        total += (now - start)
+                #        count += 1
+                #logging.debug('Median handler time: %.2f' % ((total / count) if count else 0))
 
                 self.shutdown_event.wait(3)
         except Exception as ex:
@@ -371,5 +374,29 @@ class Crawler(object):
                 [x.join() for x in result_workers]
             except KeyboardInterrupt:
                 self.shutdown_event.set()
+
         finally:
             self.shutdown()
+
+            ## Wait all thread completes working or
+            ## kill if it takes more than 1 second
+            #try:
+            #    th_manager.join(1)
+            #    th_fatalq_proc.join(1)
+            #    th_task_gen.join(1)
+            #    th_stat.join(1)
+            #    [x.join(1) for x in result_workers]
+            #except NameError:
+            #    # Inside finally block not all objects might exist
+            #    pass
+
+            ## Now just kill every greenlet
+            ## Becase of magic nature of gevent
+            ## some libraries like grpcio can not work
+            ## well with SIGINT signal
+            #current_greenlet = gevent.getcurrent()
+            #gevent.killall([
+            #        x for x in gc.get_objects()
+            #        if isinstance(x, greenlet.greenlet) and x is not current_greenlet
+            #    ], timeout=1)
+            #print('called killall()')

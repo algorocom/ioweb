@@ -1,6 +1,8 @@
 from gevent import monkey
 monkey.patch_all()#thread=False)
 
+__version__ = '0.0.2'
+
 try:
     import grpc
 except ImportError:
