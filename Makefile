@@ -18,5 +18,5 @@ clean:
 	find -name '*.pyc' -delete
 	find -name '*.swp' -delete
 
-upload:
+release:
 	git push --tags; python setup.py clean sdist upload
