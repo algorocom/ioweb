@@ -19,4 +19,4 @@ clean:
 	find -name '*.swp' -delete
 
 upload:
-	python setup.py sdist upload
+	git push --tags; python setup.py clean sdist upload
