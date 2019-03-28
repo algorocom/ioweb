@@ -19,4 +19,4 @@ clean:
 	find -name '*.swp' -delete
 
 release:
-	git push --tags; python setup.py clean sdist upload
+	git push; git push --tags; python setup.py clean sdist upload
