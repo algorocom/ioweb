@@ -266,7 +266,7 @@ class Crawler(object):
     def default_rejected_handler(self, req, res):
         pass
 
-    def prepare(self):
+    def run_hook(self):
         pass
 
     def thread_stat(self):
@@ -317,7 +317,7 @@ class Crawler(object):
         pass
 
     def run(self):
-        self.prepare()
+        self.run_hook()
         try:
             self._run_started = time.time()
 
