@@ -1,7 +1,7 @@
 from gevent import monkey
 monkey.patch_all()#thread=False)
 
-__version__ = '0.0.3'
+__version__ = '0.0.4'
 
 try:
     import grpc
