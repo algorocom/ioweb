@@ -135,7 +135,7 @@ class Crawler(object):
                     else:
                         self.submit_task(item)
                         item = None
-        except Exception as ex:
+        except (KeyboardInterrupt, Exception) as ex:
             self.fatalq.put(sys.exc_info())
 
     def is_result_ok(self, req, res):
@@ -174,7 +174,7 @@ class Crawler(object):
                         self.process_ok_result(result)
                     else:
                         self.process_fail_result(result)
-        except Exception as ex:
+        except (KeyboardInterrupt, Exception) as ex:
             self.fatalq.put(sys.exc_info())
 
     def thread_fatalq_processor(self):
@@ -223,7 +223,7 @@ class Crawler(object):
                             pause.resume_event.set()
                         self.shutdown_event.set()
                         return
-        except Exception as ex:
+        except (KeyboardInterrupt, Exception) as ex:
             self.fatalq.put(sys.exc_info())
 
     def process_ok_result(self, result):
@@ -298,14 +298,14 @@ class Crawler(object):
                 #logging.debug('Median handler time: %.2f' % ((total / count) if count else 0))
 
                 self.shutdown_event.wait(3)
-        except Exception as ex:
+        except (KeyboardInterrupt, Exception) as ex:
             self.fatalq.put(sys.exc_info())
 
 
     def thread_network(self):
         try:
             self.network.run()
-        except Exception as ex:
+        except (KeyboardInterrupt, Exception) as ex:
             self.fatalq.put(sys.exc_info())
 
     def shutdown(self):
