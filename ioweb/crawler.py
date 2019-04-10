@@ -97,8 +97,6 @@ class Crawler(object):
                     self.dataop_counters[name]['size'] += size
 
             if force_dump or self.is_dataopq_dump_time(name):
-            #if not len(self.dataopq[name]) % 500:
-            #    logging.debug('Size of %s docs: %d' % (len(self.dataopq[name]), size))
                 logging.debug('Dumping data ops')
                 ops = self.dataopq[name]
                 self.dataopq[name] = []
@@ -128,7 +126,6 @@ class Crawler(object):
 
     def thread_task_generator(self):
         try:
-            #sleep_time = 0.01
             for item in self.task_generator():
                 while item:
                     if self.shutdown_event.is_set():
@@ -358,13 +355,6 @@ class Crawler(object):
                 target=self.thread_network,
             )
             th_network.start()
-
-            #def force_shutdown():
-            #    if not self.shutdown_event.wait(5):
-            #        print('Forcing shutdown')
-            #        self.shutdown_event.set()
-
-            #Thread(target=force_shutdown).start()
 
             try:
                 th_manager.join()
