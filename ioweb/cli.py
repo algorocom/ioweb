@@ -142,7 +142,7 @@ def run_command_crawl():
     except KeyboardInterrupt:
         pass
     print('Stats:')
-    for key, val in sorted(bot.stat.counters.items()):
+    for key, val in sorted(bot.stat.total_counters.items()):
         print(' * %s: %s' % (key, val))
     if bot._run_started:
         print('Elapsed: %s' % format_elapsed_time(time.time() - bot._run_started))
