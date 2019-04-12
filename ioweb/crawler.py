@@ -273,30 +273,30 @@ class Crawler(object):
     def thread_stat(self):
         try:
             while not self.shutdown_event.is_set():
-                #stat = []
-                #now = time.time()
-                #for hdl in self.network.active_handlers:
-                #    stat.append((hdl, self.network.registry[hdl]['start']))
-                #with open('var/crawler.stat', 'w') as out:
-                #    for hdl, start in list(sorted(stat, key=lambda x: (x[1] or now), reverse=True)):
-                #        req = self.network.registry[hdl]['request']
-                #        out.write('%.2f - [#%s] - %s\n' % (
-                #            (now - start) if start else 0,
-                #            req.retry_count if req else 'NA',
-                #            urlsplit(req['url']).netloc if req else 'NA',
-                #        ))
-                #    out.write('Active handlers: %d\n' % len(self.network.active_handlers))
-                #    out.write('Idle handlers: %d\n' % len(self.network.idle_handlers))
-                #    out.write('Taskq size: %d\n' % self.taskq.qsize())
-                #    out.write('Resultq size: %d\n' % self.resultq.qsize())
+                stat = []
+                now = time.time()
+                for hdl in self.network.active_handlers:
+                    stat.append((hdl, self.network.registry[hdl]['start']))
+                with open('var/crawler.stat', 'w') as out:
+                    for hdl, start in list(sorted(stat, key=lambda x: (x[1] or now), reverse=True)):
+                        req = self.network.registry[hdl]['request']
+                        out.write('%.2f - [#%s] - %s\n' % (
+                            (now - start) if start else 0,
+                            req.retry_count if req else 'NA',
+                            urlsplit(req['url']).netloc if req else 'NA',
+                        ))
+                    out.write('Active handlers: %d\n' % len(self.network.active_handlers))
+                    out.write('Idle handlers: %d\n' % len(self.network.idle_handlers))
+                    out.write('Taskq size: %d\n' % self.taskq.qsize())
+                    out.write('Resultq size: %d\n' % self.resultq.qsize())
 
-                #total = 0
-                #count = 0
-                #for hdl, start in stat:
-                #    if start:
-                #        total += (now - start)
-                #        count += 1
-                #logging.debug('Median handler time: %.2f' % ((total / count) if count else 0))
+                total = 0
+                count = 0
+                for hdl, start in stat:
+                    if start:
+                        total += (now - start)
+                        count += 1
+                logging.debug('Median handler time: %.2f' % ((total / count) if count else 0))
 
                 self.shutdown_event.wait(3)
         except (KeyboardInterrupt, Exception) as ex:
@@ -328,10 +328,8 @@ class Crawler(object):
             th_task_gen = Thread(target=self.thread_task_generator)
             th_task_gen.start()
 
-
-            th_stat = Thread(target=self.thread_stat)
-            th_stat.start()
-
+            #th_stat = Thread(target=self.thread_stat)
+            #th_stat.start()
 
             pauses = [self.network_pause]
             result_workers = []
@@ -361,7 +359,7 @@ class Crawler(object):
                 th_manager.join()
                 th_fatalq_proc.join()
                 th_task_gen.join()
-                th_stat.join()
+                #th_stat.join()
                 [x.join() for x in result_workers]
             except KeyboardInterrupt:
                 self.shutdown_event.set()

@@ -157,6 +157,7 @@ class NetworkService(object):
     def free_handler(self, ref):
         self.active_handlers.remove(ref)
         self.idle_handlers.add(ref)
+        url = self.registry[ref]['request']['url']
         self.registry[ref]['request'] = None
         self.registry[ref]['response'] = None
         self.registry[ref]['start'] = None
