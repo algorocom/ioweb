@@ -68,6 +68,11 @@ class Urllib3Transport(object):
                 raise error.MalformedResponseError('Invalid redirect header')
             else:
                 raise
+        except ValueError as ex:
+            if 'Invalid IPv6 URL' in str(ex):
+                raise error.MalformedResponseError('Invalid redirect header')
+            else:
+                raise
 
 
     def request(self, req, res):
