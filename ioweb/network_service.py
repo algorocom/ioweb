@@ -75,7 +75,7 @@ class NetworkService(object):
                     self.resultq.qsize() < self.resultq_size_limit
                 ):
                 try:
-                    task = self.taskq.get(False)
+                    prio, task = self.taskq.get(False)
                 except Empty:
                     pass
 

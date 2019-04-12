@@ -2,7 +2,7 @@ import time
 import sys
 import logging
 from threading import Event, Thread, Lock
-from queue import Queue, Empty, Full
+from queue import Queue, PriorityQueue, Empty, Full
 from urllib.parse import urlsplit 
 import re
 import json
@@ -38,7 +38,7 @@ class Crawler(object):
             result_workers=4,
             retry_limit=3,
         ):
-        self.taskq = Queue()
+        self.taskq = PriorityQueue()
         self.taskq_size_limit = max(100, network_threads * 2)
         self.resultq = Queue()
         self.shutdown_event = Event()
@@ -119,7 +119,7 @@ class Crawler(object):
 
     def submit_task(self, req):
         self.submit_task_hook(req)
-        self.taskq.put(req)
+        self.taskq.put((req.priority, req))
 
     def submit_task_hook(self, req):
         pass
@@ -254,6 +254,7 @@ class Crawler(object):
         if req.retry_count + 1 <= self.retry_limit:
             self.stat.inc('crawler:request-retry')
             req.retry_count += 1
+            req.priority = req.priority - 1
             self.submit_task(req)
         else:
             self.stat.inc('crawler:request-rejected')
