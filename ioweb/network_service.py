@@ -9,11 +9,12 @@ import traceback
 
 from urllib3 import PoolManager
 import gevent
+from gevent import Timeout
 
 from .transport import Urllib3Transport
 from .util import debug
 from .response import Response
-from .error import NetworkError
+from .error import NetworkError, OperationTimeoutError
 from .urllib3_custom import CustomPoolManager
 
 network_logger = logging.getLogger(__name__)
@@ -123,7 +124,15 @@ class NetworkService(object):
     def thread_network(self, ref, transport, req, res):
         try:
             try:
-                transport.request(req, res)
+                timeout_time = req['timeout'] or 31536000
+                with Timeout(
+                        timeout_time,
+                        OperationTimeoutError(
+                            'Timed out while reading response',
+                            Timeout(timeout_time),
+                        )
+                    ):
+                    transport.request(req, res)
             except NetworkError as ex:
                 #logging.exception('asdf')
                 error = ex
