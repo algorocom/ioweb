@@ -52,6 +52,8 @@ class Urllib3Transport(object):
             raise error.MalformedResponseError(str(ex), ex)
         except exceptions.DecodeError as ex:
             raise error.MalformedResponseError(str(ex), ex)
+        except exceptions.InvalidHeader as ex:
+            raise error.MalformedResponseError(str(ex), ex)
         except AttributeError:
             # See https://github.com/urllib3/urllib3/issues/1556
             etype, evalue, tb = sys.exc_info()
