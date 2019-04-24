@@ -32,6 +32,7 @@ setup(
         'idna',
         'certifi',
         'cachetools',
+        'gevent',
     ],
     keywords='web scraping network crawling cralwer spider pycurl',
     classifiers = [
