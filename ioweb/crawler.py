@@ -10,6 +10,7 @@ from urllib.request import urlopen
 from traceback import format_exception
 from collections import defaultdict
 import gc
+from copy import deepcopy
 
 import greenlet
 import gevent
@@ -37,7 +38,12 @@ class Crawler(object):
             network_threads=3,
             result_workers=4,
             retry_limit=3,
+            extra_data=None,
         ):
+        if extra_data is None:
+            self.extra_data = {}
+        else:
+            self.extra_data = deepcopy(extra_data)
         self.taskq = PriorityQueue()
         self.taskq_size_limit = max(100, network_threads * 2)
         self.resultq = Queue()
@@ -65,6 +71,17 @@ class Crawler(object):
         })
 
         self.init_hook()
+
+    @classmethod
+    def update_arg_parser(cls, parser):
+        for key, config in cls.extra_cli_args().items():
+            print('BEFORE', parser)
+            parser.add_argument('--extra-%s' % key, **config)
+            print('AFTER', parser)
+
+    @classmethod
+    def custom_cli_args(cls):
+        return []
 
     def is_dataopq_dump_time(self, name):
         to_dump = False
@@ -318,8 +335,8 @@ class Crawler(object):
         pass
 
     def run(self):
-        self.run_hook()
         try:
+            self.run_hook()
             self._run_started = time.time()
 
             th_fatalq_proc = Thread(target=self.thread_fatalq_processor)

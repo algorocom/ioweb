@@ -106,20 +106,16 @@ def get_crawler(crawler_id):
         return reg[crawler_id]
 
 
-def run_command_crawl():
-    parser = ArgumentParser()
-    parser.add_argument('crawler_id')
-    parser.add_argument('-t', '--network-threads', type=int, default=1)
-    parser.add_argument('-n', '--network-logs', action='store_true', default=False)
-    parser.add_argument('-p', '--profile', action='store_true', default=False)
-    #parser.add_argument('--control-logs', action='store_true', default=False)
-    opts = parser.parse_args()
-
+def run_subcommand_crawl(opts):
     setup_logging(network_logs=opts.network_logs)#, control_logs=opts.control_logs)
-
     cls = get_crawler(opts.crawler_id)
+    extra_data = {}
+    for key in cls.extra_cli_args():
+        opt_key = 'extra_%s' % key.replace('-', '_')
+        extra_data[key] = getattr(opts, opt_key)
     bot = cls(
         network_threads=opts.network_threads,
+        extra_data=extra_data,
     )
     try:
         if opts.profile:
@@ -148,3 +144,47 @@ def run_command_crawl():
         print('Elapsed: %s' % format_elapsed_time(time.time() - bot._run_started))
     else:
         print('Elapsed: NA')
+
+
+def run_subcommand_foo(parser, opts):
+    print('COMMAND FOO')
+
+
+def command_ioweb():
+    parser = ArgumentParser(add_help=False)
+
+    crawler_cls = None
+    if len(sys.argv) > 2:
+        if sys.argv[1] == 'crawl':
+            crawler_cls = get_crawler(sys.argv[2])
+
+    subparsers = parser.add_subparsers(
+        dest='command',
+        title='Subcommands of ioweb command',
+        description='',
+    )
+
+    # Crawl
+    crawl_subparser = subparsers.add_parser(
+        'crawl', help='Run crawler',
+    )
+    crawl_subparser.add_argument('crawler_id')
+    crawl_subparser.add_argument('-t', '--network-threads', type=int, default=1)
+    crawl_subparser.add_argument('-n', '--network-logs', action='store_true', default=False)
+    crawl_subparser.add_argument('-p', '--profile', action='store_true', default=False)
+    #parser.add_argument('--control-logs', action='store_true', default=False)
+    crawler_cls.update_arg_parser(crawl_subparser)
+
+    # Foo
+    foo_subparser = subparsers.add_parser(
+        'foo', help='Just test subcommand',
+    )
+
+    opts = parser.parse_args()
+    if opts.command == 'crawl':
+        run_subcommand_crawl(opts)
+    else:
+        if opts.command == 'foo':
+            run_subcommand_foo(opts)
+        else:
+            parser.print_help()
