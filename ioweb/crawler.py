@@ -48,6 +48,7 @@ class Crawler(object):
         self.taskq_size_limit = max(100, network_threads * 2)
         self.resultq = Queue()
         self.shutdown_event = Event()
+        self.fatal_error_happened = Event()
         self.network_pause = Pause()
         self.retry_limit = retry_limit
         self.stat = Stat(speed_keys='crawler:request-processed')
@@ -202,6 +203,7 @@ class Crawler(object):
                 pass
             else:
                 self.shutdown_event.set()
+                self.fatal_error_happened.set()
                 logging.error('Fatal exception')
                 logging.error(''.join(format_exception(etype, evalue, tb)))
 
@@ -372,16 +374,20 @@ class Crawler(object):
             )
             th_network.start()
 
-            try:
-                th_manager.join()
-                th_fatalq_proc.join()
-                th_task_gen.join()
-                #th_stat.join()
-                [x.join() for x in result_workers]
-            except KeyboardInterrupt:
-                self.shutdown_event.set()
+            #try:
+            th_manager.join()
+            th_fatalq_proc.join()
+            th_task_gen.join()
+            #th_stat.join()
+            [x.join() for x in result_workers]
+            #except KeyboardInterrupt:
+            #    self.shutdown_event.set()
 
+        except (Exception, KeyboardInterrupt):
+            self.fatal_error_happened.set()
+            raise
         finally:
+            self.shutdown_event.set()
             self.shutdown()
 
             ## Wait all thread completes working or

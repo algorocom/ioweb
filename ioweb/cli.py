@@ -136,7 +136,7 @@ def run_subcommand_crawl(opts):
         else:
             bot.run()
     except KeyboardInterrupt:
-        pass
+        bot.fatal_error_happened.set()
     print('Stats:')
     for key, val in sorted(bot.stat.total_counters.items()):
         print(' * %s: %s' % (key, val))
@@ -144,6 +144,10 @@ def run_subcommand_crawl(opts):
         print('Elapsed: %s' % format_elapsed_time(time.time() - bot._run_started))
     else:
         print('Elapsed: NA')
+    if bot.fatal_error_happened.is_set():
+        sys.exit(1)
+    else:
+        sys.exit(0)
 
 
 def run_subcommand_foo(parser, opts):

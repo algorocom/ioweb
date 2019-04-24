@@ -138,6 +138,7 @@ class NetworkService(object):
                 error = ex
             except Exception as ex:
                 logging.exception('Unexpected failure in network request')
+                logging.exception('URL: %s' % req['url'])
                 self.stat.inc('unexpected-network-exception')
                 uid = uuid4()
                 with open('var/fatal-%s.txt' % uid, 'w') as out:

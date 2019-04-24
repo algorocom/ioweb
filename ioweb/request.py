@@ -17,7 +17,7 @@ class Request(object):
         return {
             'url': None,
             'max_redirects': 0,
-            'certinfo': False,
+            #'certinfo': False,
             'extra_valid_status': None,
             'timeout': 10,
             'connect_timeout': 5,
@@ -33,7 +33,7 @@ class Request(object):
         for key in kwargs:
             assert key in (
                 'meta', 'name', 'url',
-                'max_redirects', 'certinfo',
+                'max_redirects', # 'certinfo',
                 'timeout', 'connect_timeout',
                 'resolve', 'raw', 'headers',
                 'content_encoding', 'decode_content',
