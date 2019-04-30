@@ -87,8 +87,8 @@ class Crawler(object):
             print('AFTER', parser)
 
     @classmethod
-    def custom_cli_args(cls):
-        return []
+    def extra_cli_args(cls):
+        return {}
 
     def is_dataopq_dump_time(self, name):
         to_dump = False
