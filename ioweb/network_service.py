@@ -14,7 +14,7 @@ from gevent import Timeout
 from .transport import Urllib3Transport
 from .util import debug
 from .response import Response
-from .error import NetworkError, OperationTimeoutError
+from .error import NetworkError, OperationTimeoutError, collect_error_context
 from .request import Request, CallbackRequest
 from .urllib3_custom import CustomPoolManager
 
@@ -159,20 +159,7 @@ class NetworkService(object):
                 'response': res,
             })
         except Exception as ex:
-            ctx = {}
-            if 'url' in req.config:
-                ctx['req_url'] = req['url']
-            ctx['req_name'] = req.config.get('name', None)
-            if req.error_context:
-                try:
-                    ctx.update(req.error_context(req))
-                except Exception as ex:
-                    ctx.update({
-                        'internal_error': (
-                            'error_context callback failed with %s'
-                            % ex
-                        )
-                    })
+            ctx = collect_error_context(req)
             self.fatalq.put((sys.exc_info(), ctx))
         finally:
             self.free_handler(ref)

@@ -1,3 +1,4 @@
+from datetime import datetime
 from traceback import format_exception
 
 
@@ -22,6 +23,26 @@ class FileHandler(object):
             )
         )
         self.logfile.flush()
+
+
+class MongodbHandler(object):
+    def __init__(self, **kwargs):
+        from pymongo import MongoClient
+
+        self.db_name = kwargs.pop('database', 'ioweb')
+        self.col_name = kwargs.pop('collection', 'crawler_error')
+        self.connection_args = kwargs
+        self.db = MongoClient(**kwargs)[self.db_name]
+
+    def handle_error(self, exc_info, ctx=None):
+        ctx = ctx or {}
+        ctx['traceback'] = ''.join(format_exception(*exc_info))
+        ctx['error_type'] = exc_info[0].__name__
+        ctx['error_msg'] = str(exc_info[1])
+        self.db[self.col_name].insert_one({
+            'date': datetime.utcnow(),
+            'data': ctx,
+        })
 
 
 class ErrorLogger(object):

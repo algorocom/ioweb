@@ -19,8 +19,8 @@ from .util import Pause, debug
 #from .loop import MultiCurlLoop
 from .network_service import NetworkService
 from .stat import Stat
-from .request import Request, CallbackRequest
-from .error import get_error_tag
+from .request import Request, CallbackRequest, BaseRequest
+from .error import get_error_tag, collect_error_context
 from .error_logger import ErrorLogger
 
 
@@ -42,6 +42,7 @@ class Crawler(object):
             result_workers=4,
             retry_limit=3,
             extra_data=None,
+            stop_on_handler_error=False,
         ):
         if extra_data is None:
             self.extra_data = {}
@@ -75,7 +76,7 @@ class Crawler(object):
             'size': 0,
         })
         self.error_logger = ErrorLogger()
-        self.error_logger.add_handler('file')
+        self.stop_on_handler_error = stop_on_handler_error
 
         self.init_hook()
 
@@ -215,12 +216,15 @@ class Crawler(object):
                 logging.error('Fatal exception')
                 logging.error(''.join(format_exception(*exc_info)))
                 if not isinstance(exc_info[1], KeyboardInterrupt):
-                    ctx = ctx or {}
-                    ctx.update({
-                        'crawler_id': self.__class__.__name__,
-                        'date': datetime.utcnow().isoformat(),
-                    })
-                    self.error_logger.log_error(exc_info, ctx)
+                    self.log_error(exc_info, ctx)
+
+    def log_error(self, exc_info, ctx=None):
+        ctx = ctx or {}
+        ctx.update({
+            'crawler_id': self.__class__.__name__,
+            'date': datetime.utcnow().isoformat(),
+        })
+        self.error_logger.log_error(exc_info, ctx)
 
     def thread_manager(self, th_task_gen, pauses):
         try:
@@ -264,17 +268,31 @@ class Crawler(object):
         self.stat.inc('crawler:request-ok')
         name = result['request'].config['name']
         handler = getattr(self, 'handler_%s' % name)
-        handler_result = handler(
-            result['request'],
-            result['response'],
-        )
         try:
-            iter(handler_result)
-        except TypeError:
-            pass
-        else:
-            for item in handler_result:
-                print('Processing handler result: %s' % item)
+            handler_result = handler(
+                result['request'],
+                result['response'],
+            )
+            try:
+                iter(handler_result)
+            except TypeError:
+                pass
+            else:
+                for item in handler_result:
+                    if isinstance(item, BaseRequest):
+                        self.submit_task(item)
+                    else:
+                        raise Exception(
+                            'Handler yielded non request task: %s' % item
+                        )
+        except Exception as ex:
+            self.stat.inc('result-handler-error:%s' % get_error_tag(ex))
+            if self.stop_on_handler_error:
+                raise
+            else:
+                logging.exception('Error in result handler')
+                ctx = collect_error_context(result['request'])
+                self.log_error(sys.exc_info(), ctx)
 
     def process_fail_result(self, result):
         self.stat.inc('crawler:request-fail')
@@ -298,7 +316,16 @@ class Crawler(object):
             handler = getattr(self, 'rejected_%s' % name, None)
             if handler is None:
                 handler = self.default_rejected_handler
-            handler(result['request'], result['response'])
+            try:
+                handler(result['request'], result['response'])
+            except Exception as ex:
+                self.stat.inc('rejected-handler-error:%s' % get_error_tag(ex))
+                if self.stop_on_handler_error:
+                    raise
+                else:
+                    logging.exception('Error in rejected result handler')
+                    ctx = collect_error_context(req)
+                    self.log_error(sys.exc_info(), ctx)
 
     def default_rejected_handler(self, req, res):
         pass
@@ -385,20 +412,16 @@ class Crawler(object):
             )
             th_manager.start()
 
-
             th_network = Thread(
                 target=self.thread_network,
             )
             th_network.start()
 
-            #try:
             th_manager.join()
             th_fatalq_proc.join()
             th_task_gen.join()
             #th_stat.join()
             [x.join() for x in result_workers]
-            #except KeyboardInterrupt:
-            #    self.shutdown_event.set()
 
         except (Exception, KeyboardInterrupt):
             self.fatal_error_happened.set()
@@ -406,26 +429,3 @@ class Crawler(object):
         finally:
             self.shutdown_event.set()
             self.shutdown()
-
-            ## Wait all thread completes working or
-            ## kill if it takes more than 1 second
-            #try:
-            #    th_manager.join(1)
-            #    th_fatalq_proc.join(1)
-            #    th_task_gen.join(1)
-            #    th_stat.join(1)
-            #    [x.join(1) for x in result_workers]
-            #except NameError:
-            #    # Inside finally block not all objects might exist
-            #    pass
-
-            ## Now just kill every greenlet
-            ## Becase of magic nature of gevent
-            ## some libraries like grpcio can not work
-            ## well with SIGINT signal
-            #current_greenlet = gevent.getcurrent()
-            #gevent.killall([
-            #        x for x in gc.get_objects()
-            #        if isinstance(x, greenlet.greenlet) and x is not current_greenlet
-            #    ], timeout=1)
-            #print('called killall()')

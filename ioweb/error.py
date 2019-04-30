@@ -86,3 +86,21 @@ def get_error_tag(err):
         return err.transport_error.__class__.__name__.lower()
     else:
         return err.__class__.__name__.lower()
+
+
+def collect_error_context(req):
+    ctx = {}
+    if 'url' in req.config:
+        ctx['req_url'] = req['url']
+    ctx['req_name'] = req.config.get('name', None)
+    if req.error_context:
+        try:
+            ctx.update(req.error_context(req))
+        except Exception as ex:
+            ctx.update({
+                'internal_error': (
+                    'error_context callback failed with %s'
+                    % ex
+                )
+            })
+    return ctx
