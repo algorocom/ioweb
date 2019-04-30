@@ -111,6 +111,8 @@ class Crawler(object):
         return to_dump
 
     def enq_dataop(self, name, op, size=None, force_dump=False):
+        if op:
+            self.enq_dataop_hook(name, op)
         self.dataop_lock[name].acquire()
         released = False
         try:
@@ -135,6 +137,8 @@ class Crawler(object):
             if not released:
                 self.dataop_lock[name].release()
 
+    def enq_dataop_hook(self, name, op):
+        pass
 
     def init_hook(self):
         pass
