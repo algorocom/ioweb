@@ -18,7 +18,8 @@ from .util import Pause, debug
 #from .loop import MultiCurlLoop
 from .network_service import NetworkService
 from .stat import Stat
-from .request import Request
+from .request import Request, CallbackRequest
+from .error import get_error_tag
 
 
 class Crawler(object):
@@ -159,6 +160,8 @@ class Crawler(object):
     def is_result_ok(self, req, res):
         if res.error:
             return False
+        elif isinstance(req, CallbackRequest):
+            return True
         elif (
                 0 < res.status < 400
                 or res.status == 404
@@ -266,7 +269,9 @@ class Crawler(object):
         req = result['request']
 
         if result['response'].error:
-            self.stat.inc('network-error:%s' % result['response'].error.get_tag())
+            self.stat.inc('network-error:%s' % get_error_tag(
+                result['response'].error
+            ))
         if result['response'].status:
             self.stat.inc('http:status-%s' % result['response'].status)
 

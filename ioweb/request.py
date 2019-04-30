@@ -1,44 +1,35 @@
-class Request(object):
+class BaseRequest(object):
     __slots__ = (
         'config',
         'retry_count',
         'priority',
         'meta',
+        'retry_errors',
     )
+    valid_config_keys = () 
 
-    def __init__(self, retry_count=0, priority=100, meta=None, **kwargs):
-        self.config = self.get_default_config()
-        self.setup(**kwargs)
+    def __init__(
+            self, retry_count=0, priority=100, meta=None,
+            retry_errors=None,
+            **kwargs
+        ):
         self.retry_count = retry_count
         self.priority = priority
         self.meta = meta or {}
+        self.config = self.get_default_config()
+        assert \
+            retry_errors is None or isinstance(retry_errors, tuple), \
+            'retry_errors must be None or tuple'
+        self.retry_errors = retry_errors
+        self.setup(**kwargs)
+
 
     def get_default_config(self):
-        return {
-            'url': None,
-            'max_redirects': 0,
-            #'certinfo': False,
-            'extra_valid_status': None,
-            'timeout': 10,
-            'connect_timeout': 5,
-            'resolve': None,
-            'raw': False,
-            'headers': None,
-            'content_encoding': 'gzip,chunked', 
-            'decode_content': True,
-            'content_read_limit': None,
-        }
+        return {}
 
     def setup(self, **kwargs):
         for key in kwargs:
-            assert key in (
-                'meta', 'name', 'url',
-                'max_redirects', # 'certinfo',
-                'timeout', 'connect_timeout',
-                'resolve', 'raw', 'headers',
-                'content_encoding', 'decode_content',
-                'content_read_limit', 'priority',
-            ), 'Invalid configuration key: %s' % key
+            assert key in self.valid_config_keys, 'Invalid configuration key: %s' % key
             self.config[key] = kwargs[key]
 
     def __getitem__(self, key):
@@ -71,3 +62,53 @@ class Request(object):
         #else:
         return self.priority == other.priority
 
+
+class Request(BaseRequest):
+    valid_config_keys = (
+        'name', 'url',
+        'max_redirects',
+        'timeout', 'connect_timeout',
+        'resolve', 'raw', 'headers',
+        'content_encoding', 'decode_content',
+        'content_read_limit', 'priority',
+        'extra_valid_status',
+    )
+
+    def get_default_config(self):
+        return {
+            'name': None,
+            'url': None,
+            'max_redirects': 0,
+            'timeout': 10,
+            'connect_timeout': 5,
+            'resolve': None,
+            'raw': False,
+            'headers': None,
+            'content_encoding': 'gzip,chunked', 
+            'decode_content': True,
+            'content_read_limit': None,
+            'priority': 100,
+            'extra_valid_status': None,
+        }
+
+
+class CallbackRequest(BaseRequest):
+    """
+    CallbackRequest is not processed with network transport.
+    It stores instructions in `network_callback` which is
+    executed instead of `transport.request`
+    """
+    valid_config_keys = (
+        'name',
+        'timeout',
+        'raw',
+        'network_callback',
+    )
+
+    def get_default_config(self):
+        return {
+            'name': None,
+            'timeout': 10,
+            'raw': False,
+            'network_callback': None,
+        }

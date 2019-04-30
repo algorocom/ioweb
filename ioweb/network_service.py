@@ -15,6 +15,7 @@ from .transport import Urllib3Transport
 from .util import debug
 from .response import Response
 from .error import NetworkError, OperationTimeoutError
+from .request import Request, CallbackRequest
 from .urllib3_custom import CustomPoolManager
 
 network_logger = logging.getLogger(__name__)
@@ -101,9 +102,10 @@ class NetworkService(object):
             retry_str = ' [retry #%d]' % req.retry_count
         else:
             retry_str = ''
-        network_logger.debug(
-            'GET %s%s', req['url'], retry_str
-        )
+        if isinstance(req, Request):
+            network_logger.debug(
+                'GET %s%s', req['url'], retry_str
+            )
         self.registry[ref].update({
             'request': req,
             'response': res,
@@ -132,9 +134,13 @@ class NetworkService(object):
                             Timeout(timeout_time),
                         )
                     ):
-                    transport.request(req, res)
-            except NetworkError as ex:
-                #logging.exception('asdf')
+                    if isinstance(req, CallbackRequest):
+                        req['network_callback'](req, res)
+                    else:
+                        transport.request(req, res)
+            except OperationTimeoutError as ex:
+                error = ex
+            except (req.retry_errors or NetworkError) as ex:
                 error = ex
             except Exception as ex:
                 logging.exception('Unexpected failure in network request')
@@ -147,9 +153,12 @@ class NetworkService(object):
                 return
             else:
                 error = None
-            transport.prepare_response(
-                req, res, error, raise_network_error=False
-            )
+            if isinstance(req, CallbackRequest):
+                res.error = error
+            else:
+                transport.prepare_response(
+                    req, res, error, raise_network_error=False
+                )
             self.resultq.put({
                 'request': req,
                 'response': res,
@@ -167,7 +176,6 @@ class NetworkService(object):
     def free_handler(self, ref):
         self.active_handlers.remove(ref)
         self.idle_handlers.add(ref)
-        url = self.registry[ref]['request']['url']
         self.registry[ref]['request'] = None
         self.registry[ref]['response'] = None
         self.registry[ref]['start'] = None

@@ -17,6 +17,7 @@ class Response(object):
         'status',
         'error',
         'headers',
+        'meta',
     )
 
     def __init__(self):
@@ -25,6 +26,7 @@ class Response(object):
         self.cert = None
         self.status = None
         self.error = None
+        self.meta = {}
 
     def write_bytes_body(self, data):
         return self._bytes_body.write(data)

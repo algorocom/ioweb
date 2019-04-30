@@ -18,9 +18,6 @@ class NetworkError(IowebError):
         if len(args) > 1:
             self.transport_error = args[1]
 
-    def get_tag(self):
-        return self.transport_error.__class__.__name__.lower()
-
 
 class DataWriteError(NetworkError):
     """
@@ -82,3 +79,10 @@ ERRNO_CLASS_MAPPING = {
     47: TooManyRedirectsError,
     67: AuthError,
 }
+
+
+def get_error_tag(err):
+    if isinstance(err, NetworkError):
+        return err.transport_error.__class__.__name__.lower()
+    else:
+        return err.__class__.__name__.lower()

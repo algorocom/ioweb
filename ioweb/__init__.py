@@ -14,7 +14,7 @@ else:
     gevent.init_gevent()
 
 from .session import Session
-from .request import Request
+from .request import Request, CallbackRequest
 from .data import Data
 from .response import Response
 from .crawler import Crawler
