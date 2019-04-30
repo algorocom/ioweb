@@ -11,6 +11,7 @@ from traceback import format_exception
 from collections import defaultdict
 import gc
 from copy import deepcopy
+from datetime import datetime
 
 import greenlet
 import gevent
@@ -20,6 +21,7 @@ from .network_service import NetworkService
 from .stat import Stat
 from .request import Request, CallbackRequest
 from .error import get_error_tag
+from .error_logger import ErrorLogger
 
 
 class Crawler(object):
@@ -56,6 +58,7 @@ class Crawler(object):
         self.fatalq = Queue()
         self.network = NetworkService(
             self.taskq, self.resultq,
+            fatalq=self.fatalq,
             threads=network_threads,
             shutdown_event=self.shutdown_event,
             pause=self.network_pause,
@@ -71,6 +74,8 @@ class Crawler(object):
             'number': 0,
             'size': 0,
         })
+        self.error_logger = ErrorLogger()
+        self.error_logger.add_handler('file')
 
         self.init_hook()
 
@@ -155,7 +160,7 @@ class Crawler(object):
                         self.submit_task(item)
                         item = None
         except (KeyboardInterrupt, Exception) as ex:
-            self.fatalq.put(sys.exc_info())
+            self.fatalq.put((sys.exc_info(), None))
 
     def is_result_ok(self, req, res):
         if res.error:
@@ -196,19 +201,26 @@ class Crawler(object):
                     else:
                         self.process_fail_result(result)
         except (KeyboardInterrupt, Exception) as ex:
-            self.fatalq.put(sys.exc_info())
+            self.fatalq.put((sys.exc_info(), None))
 
     def thread_fatalq_processor(self):
         while not self.shutdown_event.is_set():
             try:
-                etype, evalue, tb = self.fatalq.get(True, 0.1)
+                exc_info, ctx = self.fatalq.get(True, 0.1)
             except Empty:
                 pass
             else:
                 self.shutdown_event.set()
                 self.fatal_error_happened.set()
                 logging.error('Fatal exception')
-                logging.error(''.join(format_exception(etype, evalue, tb)))
+                logging.error(''.join(format_exception(*exc_info)))
+                if not isinstance(exc_info[1], KeyboardInterrupt):
+                    ctx = ctx or {}
+                    ctx.update({
+                        'crawler_id': self.__class__.__name__,
+                        'date': datetime.utcnow().isoformat(),
+                    })
+                    self.error_logger.log_error(exc_info, ctx)
 
     def thread_manager(self, th_task_gen, pauses):
         try:
@@ -246,7 +258,7 @@ class Crawler(object):
                         self.shutdown_event.set()
                         return
         except (KeyboardInterrupt, Exception) as ex:
-            self.fatalq.put(sys.exc_info())
+            self.fatalq.put((sys.exc_info(), None))
 
     def process_ok_result(self, result):
         self.stat.inc('crawler:request-ok')
@@ -324,14 +336,14 @@ class Crawler(object):
 
                 self.shutdown_event.wait(3)
         except (KeyboardInterrupt, Exception) as ex:
-            self.fatalq.put(sys.exc_info())
+            self.fatalq.put((sys.exc_info(), None))
 
 
     def thread_network(self):
         try:
             self.network.run()
         except (KeyboardInterrupt, Exception) as ex:
-            self.fatalq.put(sys.exc_info())
+            self.fatalq.put((sys.exc_info(), None))
 
     def shutdown(self):
         for name in self.dataopq.keys():

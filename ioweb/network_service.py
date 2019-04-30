@@ -26,6 +26,7 @@ class NetworkService(object):
             self,
             taskq,
             resultq,
+            fatalq,
             resultq_size_limit=None,
             threads=3,
             shutdown_event=None,
@@ -36,6 +37,7 @@ class NetworkService(object):
         # Input arguments
         self.taskq = taskq
         self.resultq = resultq
+        self.fatalq = fatalq
         if resultq_size_limit is None:
             resultq_size_limit = threads * 2
         self.resultq_size_limit = resultq_size_limit
@@ -143,14 +145,7 @@ class NetworkService(object):
             except (req.retry_errors or NetworkError) as ex:
                 error = ex
             except Exception as ex:
-                logging.exception('Unexpected failure in network request')
-                logging.exception('URL: %s' % req['url'])
-                self.stat.inc('unexpected-network-exception')
-                uid = uuid4()
-                with open('var/fatal-%s.txt' % uid, 'w') as out:
-                    out.write('URL: %s\n' % req['url'])
-                    out.write(traceback.format_exc() + '\n')
-                return
+                raise
             else:
                 error = None
             if isinstance(req, CallbackRequest):
@@ -164,12 +159,21 @@ class NetworkService(object):
                 'response': res,
             })
         except Exception as ex:
-            logging.exception('Unexpected failure in preparing network response')
-            self.stat.inc('unexpected-network-exception')
-            uid = uuid4()
-            with open('var/fatal-%s.txt' % uid, 'w') as out:
-                out.write('URL: %s\n' % req['url'])
-                out.write(traceback.format_exc() + '\n')
+            ctx = {}
+            if 'url' in req.config:
+                ctx['req_url'] = req['url']
+            ctx['req_name'] = req.config.get('name', None)
+            if req.error_context:
+                try:
+                    ctx.update(req.error_context(req))
+                except Exception as ex:
+                    ctx.update({
+                        'internal_error': (
+                            'error_context callback failed with %s'
+                            % ex
+                        )
+                    })
+            self.fatalq.put((sys.exc_info(), ctx))
         finally:
             self.free_handler(ref)
 

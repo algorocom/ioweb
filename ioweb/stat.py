@@ -143,7 +143,7 @@ class Stat(object):
                 time.sleep(sleep_time)
         except (KeyboardInterrupt, Exception) as ex:
             if self.fatalq:
-                self.fatalq.put(sys.exc_info())
+                self.fatalq.put((sys.exc_info(), None))
             else:
                 raise
 
@@ -168,7 +168,7 @@ class Stat(object):
                 time.sleep(sleep_time)
         except (KeyboardInterrupt, Exception) as ex:
             if self.fatalq:
-                self.fatalq.put(sys.exc_info())
+                self.fatalq.put((sys.exc_info(), None))
             else:
                 raise
 

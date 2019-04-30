@@ -5,12 +5,13 @@ class BaseRequest(object):
         'priority',
         'meta',
         'retry_errors',
+        'error_context',
     )
     valid_config_keys = () 
 
     def __init__(
             self, retry_count=0, priority=100, meta=None,
-            retry_errors=None,
+            retry_errors=None, error_context=None,
             **kwargs
         ):
         self.retry_count = retry_count
@@ -21,6 +22,7 @@ class BaseRequest(object):
             retry_errors is None or isinstance(retry_errors, tuple), \
             'retry_errors must be None or tuple'
         self.retry_errors = retry_errors
+        self.error_context = error_context
         self.setup(**kwargs)
 
 
