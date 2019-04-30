@@ -83,9 +83,7 @@ class Crawler(object):
     @classmethod
     def update_arg_parser(cls, parser):
         for key, config in cls.extra_cli_args().items():
-            print('BEFORE', parser)
             parser.add_argument('--extra-%s' % key, **config)
-            print('AFTER', parser)
 
     @classmethod
     def extra_cli_args(cls):

@@ -122,7 +122,7 @@ class Stat(object):
 
     def build_counter_string(self):
         ret = []
-        for key in list(self.total_counters.keys()):
+        for key in sorted(list(self.total_counters.keys())):
             if not key.startswith(self.ignore_prefixes):
                 label = self.key_aliases.get(key, key)
                 val = self.total_counters[key]
