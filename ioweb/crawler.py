@@ -184,6 +184,7 @@ class Crawler(object):
 
     def thread_result_processor(self, pause):
         try:
+            error_ctx = None
             while not self.shutdown_event.is_set():
                 if pause.pause_event.is_set():
                     pause.process_pause()
@@ -193,18 +194,22 @@ class Crawler(object):
                     pass
                 else:
                     self.stat.inc('crawler:request-processed')
-                    if (
-                            result['request']['raw']
-                            or self.is_result_ok(
-                                result['request'],
-                                result['response'],
-                            )
-                        ):
-                        self.process_ok_result(result)
-                    else:
-                        self.process_fail_result(result)
+                    try:
+                        if (
+                                result['request']['raw']
+                                or self.is_result_ok(
+                                    result['request'],
+                                    result['response'],
+                                )
+                            ):
+                            self.process_ok_result(result)
+                        else:
+                            self.process_fail_result(result)
+                    except Exception as ex:
+                        error_ctx = collect_error_context(result['request'])
+                        raise
         except (KeyboardInterrupt, Exception) as ex:
-            self.fatalq.put((sys.exc_info(), None))
+            self.fatalq.put((sys.exc_info(), error_ctx))
 
     def thread_fatalq_processor(self):
         while not self.shutdown_event.is_set():
