@@ -53,7 +53,9 @@ class ErrorLogger(object):
     def __init__(self):
         self.handlers = []
 
-    def add_handler(self, hdl):
+    def add_handler(self, hdl, remove_handlers=False):
+        if remove_handlers:
+            self.handlers = []
         if isinstance(hdl, str):
             hdl = self.aliases[hdl]() 
         self.handlers.append(hdl)
