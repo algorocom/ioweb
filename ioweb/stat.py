@@ -161,7 +161,7 @@ class Stat(object):
                 else:
                     delta_counters = counters
                 prev_counters = counters
-                self.export_driver.write_events([delta_counters])
+                self.export_driver.write_events(delta_counters)
                 sleep_time = (
                     self.export_interval + (time.time() - now)
                 )
@@ -196,29 +196,24 @@ class InfluxdbExportDriver(object):
 
         self.client = InfluxDBClient(**self.connect_options)
 
-    def write_events(self, events):
+    def write_events(self, snapshot):
         from requests import RequestException
 
         if not self.database_created:
             self.client.create_database(self.connect_options['database'])
             self.database_created = True
-        batch_size = 500
-        for idx in range(0, len(events), batch_size):
-            data = []
-            for event in events[idx:idx + batch_size]:
-                if event:
-                    data.append({
-                        "measurement": "crawler_counter",
-                        "tags": self.tags,
-                        "time": datetime.utcnow().isoformat(),
-                        "fields": dict((
-                            (x, y) for x, y in event.items()
-                        )),
-                    })
-            #logging.debug('Exporting %s' % pformat(data))
+        if snapshot:
+            data = {
+                "measurement": "crawler_counter",
+                "tags": self.tags,
+                "time": datetime.utcnow().isoformat(),
+                "fields": dict((
+                    (x, y) for x, y in snapshot.items()
+                )),
+            }
             while True:
                 try:
-                    self.client.write_points(data)
+                    self.client.write_points([data])
                 except RequestException:
                     logging.exception('Fail to send metrics')
                     time.sleep(1)
