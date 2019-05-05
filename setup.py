@@ -33,6 +33,7 @@ setup(
         'certifi',
         'cachetools',
         'gevent',
+        'pysocks',
     ],
     keywords='web scraping network crawling cralwer spider pycurl',
     classifiers = [

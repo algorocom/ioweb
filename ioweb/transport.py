@@ -1,3 +1,4 @@
+from pprint import pprint
 import logging
 import time
 from contextlib import contextmanager
@@ -6,10 +7,12 @@ import sys
 
 from urllib3.util.retry import Retry
 from urllib3.util.timeout import Timeout
-from urllib3 import exceptions
+from urllib3 import exceptions, ProxyManager, make_headers
 from  urllib3.contrib import pyopenssl
+from urllib3.contrib.socks import SOCKSProxyManager
 import urllib3
 import OpenSSL.SSL
+import certifi
 
 from . import error
 from .urllib3_custom import CustomPoolManager
@@ -54,6 +57,8 @@ class Urllib3Transport(object):
             raise error.MalformedResponseError(str(ex), ex)
         except exceptions.InvalidHeader as ex:
             raise error.MalformedResponseError(str(ex), ex)
+        except exceptions.ProxyError as ex:
+            raise error.ProxyError(str(ex), ex)
         except AttributeError:
             # See https://github.com/urllib3/urllib3/issues/1556
             etype, evalue, tb = sys.exc_info()
@@ -76,18 +81,56 @@ class Urllib3Transport(object):
             else:
                 raise
 
+    def get_pool(self, req):
+        if req['proxy']:
+            if req['proxy_auth']:
+                proxy_headers = make_headers(proxy_basic_auth=req['proxy_auth'])
+            else:
+                proxy_headers = None
+            proxy_url = '%s://%s' % (req['proxy_type'], req['proxy'])
+            if req['proxy_type'] == 'socks5':
+                pool = SOCKSProxyManager(
+                    proxy_url,
+                    cert_reqs='CERT_REQUIRED',
+                    ca_certs=certifi.where(),
+                    #proxy_headers=proxy_headers
+                )
+            elif req['proxy_type'] == 'http':
+                pool = ProxyManager(
+                    proxy_url,
+                    proxy_headers=proxy_headers,
+                    cert_reqs='CERT_REQUIRED',
+                    ca_certs=certifi.where()
+                )
+            else:
+                raise IowebConfigError(
+                    'Invalid value of request option `proxy_type`: %s'
+                    % req['proxy_type']
+                )
+        else:
+            pool = self.pool
+        return pool
 
     def request(self, req, res):
+        options = {}
+        headers = req['headers'] or {}
+
         self.op_started = time.time()
         if req['resolve']:
+            if req['proxy']:
+                raise error.IowebConfigError(
+                    'Request option `resolve` could not be used along option `proxy`'
+                )
             for host, ip in req['resolve'].items():
                 self.pool.resolving_cache[host] = ip
-        headers = req['headers'] or {}
+
+        pool = self.get_pool(req)
+
         if req['content_encoding']:
             if not any(x.lower() == 'accept-encoding' for x in headers):
                 headers['accept-encoding'] = req['content_encoding']
         with self.handle_network_error():
-            self.urllib3_response = self.pool.urlopen(
+            self.urllib3_response = pool.urlopen(
                 req.method(),
                 req['url'],
                 headers=headers,
@@ -104,6 +147,7 @@ class Urllib3Transport(object):
                 ),
                 preload_content=False,
                 decode_content=req['decode_content'],
+                **options
             )
 
     def read_with_timeout(self, req, res):

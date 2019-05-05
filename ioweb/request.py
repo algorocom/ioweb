@@ -74,6 +74,7 @@ class Request(BaseRequest):
         'content_encoding', 'decode_content',
         'content_read_limit', 'priority',
         'extra_valid_status',
+        'proxy', 'proxy_auth', 'proxy_type',
     )
 
     def get_default_config(self):
@@ -91,6 +92,9 @@ class Request(BaseRequest):
             'content_read_limit': None,
             'priority': 100,
             'extra_valid_status': None,
+            'proxy': None,
+            'proxy_auth': None,
+            'proxy_type': 'http',
         }
 
 

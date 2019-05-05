@@ -5,6 +5,10 @@ class IowebError(Exception):
     pass
 
 
+class IowebConfigError(IowebError):
+    pass
+
+
 class NetworkError(IowebError):
     """
     NetworkError instance stores original transport-specific error
@@ -17,6 +21,12 @@ class NetworkError(IowebError):
             self.errmsg = args[0]
         if len(args) > 1:
             self.transport_error = args[1]
+
+
+class ProxyError(NetworkError):
+    """
+    Error occured because of proxy server failed.
+    """
 
 
 class DataWriteError(NetworkError):

@@ -31,7 +31,8 @@ class NetworkService(object):
             threads=3,
             shutdown_event=None,
             pause=None,
-            setup_handler_hook=None,
+            setup_request_hook=None,
+            setup_request_proxy=None,
             stat=None,
         ):
         # Input arguments
@@ -44,7 +45,8 @@ class NetworkService(object):
         self.threads = threads
         self.shutdown_event = shutdown_event
         self.pause = pause
-        self.setup_handler_hook = setup_handler_hook
+        self.setup_request_hook = setup_request_hook
+        self.setup_request_proxy = setup_request_proxy
         self.stat = stat
         # Init logic
         self.idle_handlers = set()
@@ -100,22 +102,19 @@ class NetworkService(object):
         res = Response()
         transport.prepare_request(req, res)
         self.active_handlers.add(ref)
-        if req.retry_count > 0:
-            retry_str = ' [retry #%d]' % req.retry_count
-        else:
-            retry_str = ''
-        if isinstance(req, Request):
-            network_logger.debug(
-                'GET %s%s', req['url'], retry_str
-            )
         self.registry[ref].update({
             'request': req,
             'response': res,
             'start': time.time(),
         })
 
-        if self.setup_handler_hook:
-            self.setup_handler_hook(transport, req)
+        if self.setup_request_hook:
+            self.setup_request_hook(transport, req)
+
+        if self.setup_request_proxy:
+            self.setup_request_proxy(transport, req)
+
+
 
         gevent.spawn(
             self.thread_network,
@@ -125,8 +124,27 @@ class NetworkService(object):
             res
         )
 
+    def log_network_request(self, req):
+        if req.retry_count > 0:
+            retry_str = ' [retry=#%d]' % req.retry_count
+        else:
+            retry_str = ''
+        if req['proxy']:
+            proxy_str = ' [proxy=%s, type=%s, auth=%s]' % (
+                req['proxy'],
+                req['proxy_type'].upper(),
+                ('YES' if req['proxy_auth'] else 'NO'),
+            )
+        else:
+            proxy_str = ''
+        if isinstance(req, Request):
+            network_logger.debug(
+                'GET %s%s%s', req['url'], retry_str, proxy_str
+            )
+
     def thread_network(self, ref, transport, req, res):
         try:
+            self.log_network_request(req)
             try:
                 timeout_time = req['timeout'] or 31536000
                 with Timeout(

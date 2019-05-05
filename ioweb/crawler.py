@@ -22,6 +22,7 @@ from .stat import Stat
 from .request import Request, CallbackRequest, BaseRequest
 from .error import get_error_tag, collect_error_context
 from .error_logger import ErrorLogger
+from .proxylist import ProxyList
 
 
 class Crawler(object):
@@ -63,7 +64,8 @@ class Crawler(object):
             threads=network_threads,
             shutdown_event=self.shutdown_event,
             pause=self.network_pause,
-            setup_handler_hook=self.setup_handler_hook,
+            setup_request_hook=self.setup_request_hook,
+            setup_request_proxy=self.setup_request_proxy,
             stat=self.stat,
         )
         self.result_workers = result_workers
@@ -77,6 +79,7 @@ class Crawler(object):
         })
         self.error_logger = ErrorLogger()
         self.stop_on_handler_error = stop_on_handler_error
+        self.proxylist = None
 
         self.init_hook()
 
@@ -88,6 +91,11 @@ class Crawler(object):
     @classmethod
     def extra_cli_args(cls):
         return {}
+
+    def load_proxylist(self, pl_type, pl_location, **kwargs):
+        self.proxylist = ProxyList.create_from_source(
+            pl_type, pl_location, **kwargs
+        )
 
     def is_dataopq_dump_time(self, name):
         to_dump = False
@@ -141,7 +149,16 @@ class Crawler(object):
     def init_hook(self):
         pass
 
-    def setup_handler_hook(self, transport, req):
+    def setup_request_proxy(self, transport, req):
+        if self.proxylist:
+            proxy = self.proxylist.random_server()
+            req.setup(
+                proxy=proxy.address(),
+                proxy_auth=proxy.auth(),
+                proxy_type=proxy.proxy_type,
+            )
+
+    def setup_request_hook(self, transport, req):
         pass
 
     def submit_task(self, req):
