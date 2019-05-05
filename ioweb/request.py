@@ -52,9 +52,6 @@ class BaseRequest(object):
             setattr(req, key, data[key])
         return req
 
-    def method(self):
-        return 'GET'
-
     def __lt__(self, other):
         return self.priority < other.priority
 
@@ -75,10 +72,12 @@ class Request(BaseRequest):
         'content_read_limit', 'priority',
         'extra_valid_status',
         'proxy', 'proxy_auth', 'proxy_type',
+        'data', 'multipart',
     )
 
     def get_default_config(self):
         return {
+            'method': None,
             'name': None,
             'url': None,
             'max_redirects': 0,
@@ -95,7 +94,17 @@ class Request(BaseRequest):
             'proxy': None,
             'proxy_auth': None,
             'proxy_type': 'http',
+            'data': None,
+            'multipart': False,
         }
+
+    def method(self):
+        if self.config['method']:
+            return self.config['method']
+        elif self.config['data']:
+            return 'POST'
+        else:
+            return 'GET'
 
 
 class CallbackRequest(BaseRequest):

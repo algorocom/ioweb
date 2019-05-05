@@ -4,7 +4,9 @@ import time
 from contextlib import contextmanager
 import traceback
 import sys
+from urllib.parse import urlencode
 
+from urllib3.filepost import encode_multipart_formdata
 from urllib3.util.retry import Retry
 from urllib3.util.timeout import Timeout
 from urllib3 import exceptions, ProxyManager, make_headers
@@ -128,7 +130,28 @@ class Urllib3Transport(object):
 
         if req['content_encoding']:
             if not any(x.lower() == 'accept-encoding' for x in headers):
-                headers['accept-encoding'] = req['content_encoding']
+                headers['Accept-Encoding'] = req['content_encoding']
+
+        if req['data']:
+            if isinstance(req['data'], dict):
+                if req['multipart']:
+                    body, ctype = encode_multipart_formata(req['data'])
+                else:
+                    body = urlencode(req['data'])
+                    ctype = 'application/x-www-form-urlencoded'
+                options['body'] = body
+                headers['Content-Type'] = ctype
+            elif isinstance(req['data'], bytes):
+                options['body'] = req['data']
+            elif isinstance(req['data'], str):
+                options['body'] = req['data'].encode('utf-8')
+            else:
+                raise IowebConfigError(
+                    'Invalid type of request data option: %s'
+                    % type(req['data'])
+                )
+            headers['Content-Length'] = len(options['body'])
+
         with self.handle_network_error():
             self.urllib3_response = pool.urlopen(
                 req.method(),
