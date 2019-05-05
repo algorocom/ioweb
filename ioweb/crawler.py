@@ -212,18 +212,22 @@ class Crawler(object):
             self.fatalq.put((sys.exc_info(), error_ctx))
 
     def thread_fatalq_processor(self):
-        while not self.shutdown_event.is_set():
-            try:
-                exc_info, ctx = self.fatalq.get(True, 0.1)
-            except Empty:
-                pass
-            else:
-                self.shutdown_event.set()
-                self.fatal_error_happened.set()
-                logging.error('Fatal exception')
-                logging.error(''.join(format_exception(*exc_info)))
-                if not isinstance(exc_info[1], KeyboardInterrupt):
-                    self.log_error(exc_info, ctx)
+        try:
+            while not self.shutdown_event.is_set():
+                try:
+                    exc_info, ctx = self.fatalq.get(True, 0.1)
+                except Empty:
+                    pass
+                else:
+                    self.shutdown_event.set()
+                    self.fatal_error_happened.set()
+                    logging.error('Fatal exception')
+                    logging.error(''.join(format_exception(*exc_info)))
+                    if not isinstance(exc_info[1], KeyboardInterrupt):
+                        self.log_error(exc_info, ctx)
+        except Exception as ex:
+            self.shutdown_event.set()
+            raise
 
     def log_error(self, exc_info, ctx=None):
         ctx = ctx or {}
