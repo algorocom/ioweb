@@ -14,7 +14,9 @@ from gevent import Timeout
 from .transport import Urllib3Transport
 from .util import debug
 from .response import Response
-from .error import NetworkError, OperationTimeoutError, collect_error_context
+from .error import (
+    DataNotValid, NetworkError, OperationTimeoutError, collect_error_context
+)
 from .request import Request, CallbackRequest
 from .urllib3_custom import CustomPoolManager
 
@@ -160,7 +162,7 @@ class NetworkService(object):
                         transport.request(req, res)
             except OperationTimeoutError as ex:
                 error = ex
-            except (req.retry_errors or NetworkError) as ex:
+            except (req.retry_errors or (NetworkError, DataNotValid)) as ex:
                 error = ex
             except Exception as ex:
                 raise

@@ -114,3 +114,9 @@ def collect_error_context(req):
                 )
             })
     return ctx
+
+
+class DataNotValid(IowebError):
+    """Used to signal that expected data was not found
+    i.e. it needs to retry network query.
+    """
