@@ -130,15 +130,21 @@ class Crawler(object):
                     self.dataop_counters[name]['size'] += size
 
             if force_dump or self.is_dataopq_dump_time(name):
-                logging.debug('Dumping data ops')
+                #logging.debug('Dumping data ops')
+                self.stat.inc('dataop-dump-%s' % name)
                 ops = self.dataopq[name]
-                self.dataopq[name] = []
-                self.dataop_counters[name]['number'] = 0
-                self.dataop_counters[name]['size'] = 0
-                self.dataop_lock[name].release()
-                released = True
-                func = getattr(self, 'dataop_handler_%s' % name)
-                func(ops)
+                if ops:
+                    self.dataopq[name] = []
+                    self.dataop_counters[name]['number'] = 0
+                    self.dataop_counters[name]['size'] = 0
+                    # release as soon as possible
+                    self.dataop_lock[name].release()
+                    released = True
+                    func = getattr(self, 'dataop_handler_%s' % name)
+                    func(ops)
+                else:
+                    self.dataop_lock[name].release()
+                    released = True
         finally:
             if not released:
                 self.dataop_lock[name].release()
