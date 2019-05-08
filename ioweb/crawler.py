@@ -176,15 +176,20 @@ class Crawler(object):
 
     def thread_task_generator(self):
         try:
-            for item in self.task_generator():
-                while item:
-                    if self.shutdown_event.is_set():
-                        return
-                    if self.taskq.qsize() >= self.taskq_size_limit:
-                        time.sleep(self._taskgen_sleep_time)
-                    else:
-                        self.submit_task(item)
-                        item = None
+            try:
+                tgen_iter = iter(self.task_generator())
+            except TypeError:
+                return
+            else:
+                for item in tgen_iter:
+                    while item:
+                        if self.shutdown_event.is_set():
+                            return
+                        if self.taskq.qsize() >= self.taskq_size_limit:
+                            time.sleep(self._taskgen_sleep_time)
+                        else:
+                            self.submit_task(item)
+                            item = None
         except (KeyboardInterrupt, Exception) as ex:
             self.fatalq.put((sys.exc_info(), None))
 
