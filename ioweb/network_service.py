@@ -127,19 +127,19 @@ class NetworkService(object):
         )
 
     def log_network_request(self, req):
-        if req.retry_count > 0:
-            retry_str = ' [retry=#%d]' % req.retry_count
-        else:
-            retry_str = ''
-        if req['proxy']:
-            proxy_str = ' [proxy=%s, type=%s, auth=%s]' % (
-                req['proxy'],
-                req['proxy_type'].upper(),
-                ('YES' if req['proxy_auth'] else 'NO'),
-            )
-        else:
-            proxy_str = ''
         if isinstance(req, Request):
+            if req.retry_count > 0:
+                retry_str = ' [retry=#%d]' % req.retry_count
+            else:
+                retry_str = ''
+            if req['proxy']:
+                proxy_str = ' [proxy=%s, type=%s, auth=%s]' % (
+                    req['proxy'],
+                    req['proxy_type'].upper(),
+                    ('YES' if req['proxy_auth'] else 'NO'),
+                )
+            else:
+                proxy_str = ''
             network_logger.debug(
                 'GET %s%s%s', req['url'], retry_str, proxy_str
             )
