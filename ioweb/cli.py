@@ -155,7 +155,7 @@ def run_subcommand_foo(parser, opts):
 
 
 def command_ioweb():
-    parser = ArgumentParser(add_help=False)
+    parser = ArgumentParser()#add_help=False)
 
     crawler_cls = None
     if len(sys.argv) > 2:
