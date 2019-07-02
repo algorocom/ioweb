@@ -177,7 +177,8 @@ def command_ioweb():
     crawl_subparser.add_argument('-n', '--network-logs', action='store_true', default=False)
     crawl_subparser.add_argument('-p', '--profile', action='store_true', default=False)
     #parser.add_argument('--control-logs', action='store_true', default=False)
-    crawler_cls.update_arg_parser(crawl_subparser)
+    if crawler_cls:
+        crawler_cls.update_arg_parser(crawl_subparser)
 
     # Foo
     foo_subparser = subparsers.add_parser(

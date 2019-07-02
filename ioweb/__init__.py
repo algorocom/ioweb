@@ -20,3 +20,4 @@ from .response import Response
 from .crawler import Crawler
 from .transport import Urllib3Transport
 from .task_generator import TaskGenerator
+from .error import *

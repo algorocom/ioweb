@@ -92,7 +92,7 @@ class ProxyList(object):
                     host, port, user, password = match.groups()
             else:
                 host, port = match.groups()
-                user, password = None
+                user, password = None, None
             port = int(port)
             servers.append(
                 Proxy(

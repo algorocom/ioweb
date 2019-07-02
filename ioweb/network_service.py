@@ -55,11 +55,14 @@ class NetworkService(object):
         self.active_handlers = set()
         self.registry = {}
         self.pool = CustomPoolManager()
+        #self.proxy_pools = {}
         for _ in range(threads):
             ref = object()
             self.idle_handlers.add(ref)
             self.registry[ref] = {
-                'transport': Urllib3Transport(pool=self.pool),
+                'transport': Urllib3Transport(
+                    pool=self.pool,# proxy_pools=self.proxy_pools
+                ),
                 'request': None,
                 'response': None,
                 'start': None,
@@ -161,10 +164,13 @@ class NetworkService(object):
                     else:
                         transport.request(req, res)
             except OperationTimeoutError as ex:
+                #logging.error(ex)
                 error = ex
             except (req.retry_errors or (NetworkError, DataNotValid)) as ex:
+                #logging.error(ex)
                 error = ex
             except Exception as ex:
+                #logging.error(ex)
                 raise
             else:
                 error = None
