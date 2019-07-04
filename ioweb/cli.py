@@ -11,6 +11,7 @@ else:
     from grpc.experimental import gevent
     gevent.init_gevent()
 
+from pprint import pprint
 import sys
 import re
 import time
@@ -33,7 +34,7 @@ def find_crawlers_in_module(mod, reg):
                 and issubclass(val, Crawler)
                 and val is not Crawler
             ):
-            logger.debug(
+            logger.error(
                 'Found crawler %s in module %s',
                 val.__name__, mod.__file__
             )
@@ -99,7 +100,7 @@ def get_crawler(crawler_id):
     reg = collect_crawlers()
     if crawler_id not in reg:
         sys.stderr.write(
-            'Could not load %s crawler\n' % crawler_id
+            'Could not find %s crawler\n' % crawler_id
         )
         sys.exit(1)
     else:

@@ -222,6 +222,8 @@ class Crawler(object):
                     pass
                 else:
                     self.stat.inc('crawler:request-processed')
+                    if result['request']['proxy']:
+                        self.stat.inc('crawler:request-proxy-processed')
                     try:
                         if (
                                 result['request']['raw']
@@ -431,7 +433,7 @@ class Crawler(object):
             th_task_gen.start()
 
             th_stat = Thread(target=self.thread_stat)
-            th_stat.start()
+            #th_stat.start()
 
             pauses = [self.network_pause]
             result_workers = []
@@ -459,7 +461,7 @@ class Crawler(object):
             th_manager.join()
             th_fatalq_proc.join()
             th_task_gen.join()
-            th_stat.join()
+            #th_stat.join()
             [x.join() for x in result_workers]
 
         except (Exception, KeyboardInterrupt):

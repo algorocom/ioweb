@@ -12,6 +12,7 @@ from datetime import datetime
 class Stat(object):
     default_key_aliases = {
         'crawler:request-processed': 'req',
+        'crawler:request-proxy-processed': 'req-proxy',
         'crawler:request-ok': 'req-ok',
         'crawler:request-retry': 'req-retry',
         'crawler:request-fail': 'req-fail',
