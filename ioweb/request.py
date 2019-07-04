@@ -72,7 +72,7 @@ class Request(BaseRequest):
         'content_read_limit', 'priority',
         'extra_valid_status',
         'proxy', 'proxy_auth', 'proxy_type',
-        'data', 'multipart',
+        'data', 'multipart', 'verify',
     )
 
     def get_default_config(self):
@@ -96,6 +96,7 @@ class Request(BaseRequest):
             'proxy_type': 'http',
             'data': None,
             'multipart': False,
+            'verify': True,
         }
 
     def method(self):

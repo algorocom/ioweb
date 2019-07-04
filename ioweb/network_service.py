@@ -18,7 +18,6 @@ from .error import (
     DataNotValid, NetworkError, OperationTimeoutError, collect_error_context
 )
 from .request import Request, CallbackRequest
-from .urllib3_custom import CustomPoolManager
 
 network_logger = logging.getLogger(__name__)
 
@@ -54,14 +53,13 @@ class NetworkService(object):
         self.idle_handlers = set()
         self.active_handlers = set()
         self.registry = {}
-        self.pool = CustomPoolManager()
-        #self.proxy_pools = {}
+        self.pools = {}
         for _ in range(threads):
             ref = object()
             self.idle_handlers.add(ref)
             self.registry[ref] = {
                 'transport': Urllib3Transport(
-                    pool=self.pool,# proxy_pools=self.proxy_pools
+                    #pools=self.pools,
                 ),
                 'request': None,
                 'response': None,

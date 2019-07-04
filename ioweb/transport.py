@@ -27,21 +27,18 @@ class Urllib3Transport(object):
     __slots__ = (
         'urllib3_response',
         'op_started',
-        'pool',
-        'proxy_pools',
+        'pools',
     )
 
-    def __init__(self, pool=None, proxy_pools=None):
-        if pool is None:
-            pool = CustomPoolManager(
-                cert_reqs='CERT_REQUIRED',
-                ca_certs=certifi.where(),
-            )
-        self.pool = pool
-        if proxy_pools:
-            self.proxy_pools = proxy_pools
-        else:
-            self.proxy_pools = {}
+    def __init__(self, pools=None):
+        if pools is None:
+            pools = {}
+        self.pools = {}
+        self.pools[(None, None, True)] = CustomPoolManager(
+            cert_reqs='CERT_REQUIRED',
+            ca_certs=certifi.where(),
+        )
+        self.pools[(None, None, False)] = CustomPoolManager()
         self.urllib3_response = None
 
     def prepare_request(self, req, res):
@@ -98,35 +95,51 @@ class Urllib3Transport(object):
             else:
                 proxy_headers = None
             proxy_url = '%s://%s' % (req['proxy_type'], req['proxy'])
-            if proxy_url not in self.proxy_pools:
+            pool_key = (req['proxy_type'], req['proxy'], bool(req['verify']))
+            if pool_key not in self.pools:
                 if req['proxy_type'] == 'socks5':
-                    pool = SOCKSProxyManager(
-                        proxy_url,
-                        cert_reqs='CERT_REQUIRED',
-                        ca_certs=certifi.where(),
-                        #proxy_headers=proxy_headers
+                    opts = {
                         #num_pools=1000,
                         #maxsize=10,
-                    )
+                    }
+                    if req['verify']:
+                        pool = SOCKSProxyManager(
+                            proxy_url,
+                            cert_reqs='CERT_REQUIRED',
+                            ca_certs=certifi.where(),
+                            **opts
+                        )
+                    else:
+                        pool = SOCKSProxyManager(proxy_url, **opts)
                 elif req['proxy_type'] == 'http':
-                    pool = ProxyManager(
-                        proxy_url,
-                        proxy_headers=proxy_headers,
-                        cert_reqs='CERT_REQUIRED',
-                        ca_certs=certifi.where(),
+                    opts = {
                         #num_pools=1000,
                         #maxsize=10,
-                    )
+                    }
+                    if req['verify']:
+                        pool = ProxyManager(
+                            proxy_url,
+                            proxy_headers=proxy_headers,
+                            cert_reqs='CERT_REQUIRED',
+                            ca_certs=certifi.where(),
+                            **opts,
+                        )
+                    else:
+                        pool = ProxyManager(
+                            proxy_url,
+                            proxy_headers=proxy_headers,
+                            **opts
+                        )
                 else:
                     raise IowebConfigError(
                         'Invalid value of request option `proxy_type`: %s'
                         % req['proxy_type']
                     )
-                self.proxy_pools[proxy_url] = pool
+                self.pools[pool_key] = pool
             else:
-                pool = self.proxy_pools[proxy_url]
+                pool = self.pools[pool_key]
         else:
-            pool = self.pool
+            pool = self.pools[(None, None, bool(req['verify']))]
         return pool
 
     def request(self, req, res):
