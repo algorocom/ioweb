@@ -28,7 +28,10 @@ class Proxy(object):
         return '%s:%s' % (self.host, self.port)
 
     def auth(self):
-        return '%s:%s' % (self.user, self.password)
+        if self.user:
+            return '%s:%s' % (self.user, self.password)
+        else:
+            return None
 
 
 class ProxyList(object):
