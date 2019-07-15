@@ -13,8 +13,6 @@ import gc
 from copy import deepcopy
 from datetime import datetime
 
-import greenlet
-import gevent
 from .util import Pause, debug
 #from .loop import MultiCurlLoop
 from .network_service import NetworkService
@@ -222,8 +220,6 @@ class Crawler(object):
                     pass
                 else:
                     self.stat.inc('crawler:request-processed')
-                    if result['request']['proxy']:
-                        self.stat.inc('crawler:request-proxy-processed')
                     try:
                         if (
                                 result['request']['raw']

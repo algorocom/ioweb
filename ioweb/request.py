@@ -111,7 +111,7 @@ class Request(BaseRequest):
 class CallbackRequest(BaseRequest):
     """
     CallbackRequest is not processed with network transport.
-    It stores instructions in `network_callback` which is
+    It has `network_callback` which is
     executed instead of `transport.request`
     """
     valid_config_keys = (
