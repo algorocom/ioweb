@@ -1,16 +1,3 @@
-from gevent import monkey
-monkey.patch_all()#thread=False)
-
-try:
-    import grpc
-except ImportError:
-    pass
-else:
-    if grpc.__version__ != '1.18.0':
-        raise Exception('grpcio version must be 1.18.0')
-    from grpc.experimental import gevent
-    gevent.init_gevent()
-
 from pprint import pprint
 import sys
 import re
@@ -20,7 +7,6 @@ import json
 import logging
 from argparse import ArgumentParser
 
-#import crawler
 from .crawler import Crawler
 
 logger = logging.getLogger('crawler.cli')
