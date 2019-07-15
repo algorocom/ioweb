@@ -146,6 +146,8 @@ class Urllib3Transport(object):
         options = {}
         headers = req['headers'] or {}
 
+        pool = self.get_pool(req)
+
         self.op_started = time.time()
         if req['resolve']:
             if req['proxy']:
@@ -153,9 +155,8 @@ class Urllib3Transport(object):
                     'Request option `resolve` could not be used along option `proxy`'
                 )
             for host, ip in req['resolve'].items():
-                self.pool.resolving_cache[host] = ip
+                pool.resolving_cache[host] = ip
 
-        pool = self.get_pool(req)
 
         if req['content_encoding']:
             if not any(x.lower() == 'accept-encoding' for x in headers):
