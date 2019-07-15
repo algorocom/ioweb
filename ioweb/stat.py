@@ -50,17 +50,12 @@ class Stat(object):
         self.key_aliases = deepcopy(self.default_key_aliases)
         if key_aliases:
             self.key_aliases.update(key_aliases)
-        # Arg: shard_interval
-        #self.shard_interval = shard_interval
-        # Arg: export
-        self.export_config = export
-        self.export_driver = None
-        if self.export_config:
-            self.setup_export_driver(self.export_config)
-        # Args: export_interval
-        self.export_interval = export_interval
+
         # Arg: fatalq
         self.fatalq = fatalq
+
+        # Arg: shard_interval
+        #self.shard_interval = shard_interval
 
         # Logging
         self.total_counters = defaultdict(int)
@@ -71,9 +66,19 @@ class Stat(object):
             self.th_logging.daemon = True
             self.th_logging.start()
 
+        # Setup exporting in last case
+        # Arg: export
+        self.th_export = None
+        self.export_config = export
+        self.export_driver = None
+        if self.export_config:
+            self.setup_export_driver(self.export_config)
+
+        # Args: export_interval
+        self.export_interval = export_interval
+
         # Export
         #self.shard_counters = {}
-        self.th_export = None
         if self.export_driver:
             self.start_export_thread()
 
@@ -130,13 +135,18 @@ class Stat(object):
                 ret.append('%s: %d' % (label, val))
         return ', '.join(ret)
 
+    def render_moment(self, now=None):
+        if now is None:
+            now = time.time()
+        eps_str = self.build_eps_string(now)
+        counter_str = self.build_counter_string()
+        return 'EPS: %s | TOTAL: %s' % (eps_str, counter_str)
+
     def thread_logging(self):
         try:
             while True:
                 now = time.time()
-                eps_str = self.build_eps_string(now)
-                counter_str = self.build_counter_string()
-                logging.debug('EPS: %s | TOTAL: %s', eps_str, counter_str)
+                logging.debug(self.render_moment(now))
                 # Sleep `self.logging_interval` seconds minus time spent on logging
                 sleep_time = (
                     self.logging_interval + (time.time() - now)
