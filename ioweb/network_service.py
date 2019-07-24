@@ -142,7 +142,7 @@ class NetworkService(object):
             else:
                 proxy_str = ''
             network_logger.debug(
-                'GET %s%s%s', req['url'], retry_str, proxy_str
+                '%s %s%s%s', req.method(), req['url'], retry_str, proxy_str
             )
 
     def thread_network(self, ref, transport, req, res):
