@@ -6,6 +6,7 @@ import os.path
 import json
 import logging
 from argparse import ArgumentParser
+from importlib import import_module
 
 from .crawler import Crawler
 
@@ -37,12 +38,12 @@ def collect_crawlers():
 
     for location in ('crawlers',):
         try:
-            mod = __import__(location, None, None, ['foo'])
+            mod = import_module(location)
         except ImportError as ex:
             #if path not in str(ex):
             logger.exception('Failed to import %s', location)
         else:
-            if mod.__file__.endswith('__init__.py'):
+            if getattr(mod, '__file__', '').endswith('__init__.py'):
                 dir_ = os.path.split(mod.__file__)[0]
                 for fname in os.listdir(dir_):
                     if (
@@ -51,7 +52,7 @@ def collect_crawlers():
                     ):
                         target_mod = '%s.%s' % (location, fname[:-3])
                         try:
-                            mod = __import__(target_mod, None, None, ['foo'])
+                            mod = import_module(target_mod)
                         except ImportError as ex:
                             #if path not in str(ex):
                             logger.exception('Failed to import %s', target_mod)
