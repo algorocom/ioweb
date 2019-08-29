@@ -66,6 +66,8 @@ class Urllib3Transport(object):
             raise error.MalformedResponseError(str(ex), ex)
         except exceptions.ProxyError as ex:
             raise error.ProxyError(str(ex), ex)
+        except exceptions.MaxRetryError as ex:
+            raise error.TooManyRedirects(str(ex), ex)
         except AttributeError:
             # See https://github.com/urllib3/urllib3/issues/1556
             etype, evalue, tb = sys.exc_info()
@@ -183,16 +185,27 @@ class Urllib3Transport(object):
             headers['Content-Length'] = len(options['body'])
 
         with self.handle_network_error():
+            if req['follow_redirect']:
+                retry_opts = {
+                    'redirect': req['max_redirects'],
+                    'raise_on_redirect': True,
+                }
+            else:
+                retry_opts = {
+                    'redirect': False,
+                    'raise_on_redirect': False,
+                }
             self.urllib3_response = pool.urlopen(
                 req.method(),
                 req['url'],
                 headers=headers,
+                # total - set to None to remove this constraint
+                # and fall back on other counts. 
                 retries=Retry(
-                    total=False,
+                    total=None,
                     connect=False,
                     read=False,
-                    redirect=0,
-                    status=None,
+                    **retry_opts,
                 ),
                 timeout=Timeout(
                     connect=req['connect_timeout'],

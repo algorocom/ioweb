@@ -117,8 +117,6 @@ class NetworkService(object):
         if self.setup_request_proxy:
             self.setup_request_proxy(transport, req)
 
-
-
         gevent.spawn(
             self.thread_network,
             ref,

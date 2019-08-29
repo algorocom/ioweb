@@ -74,6 +74,12 @@ class InvalidUrlError(NetworkError):
     """
 
 
+class TooManyRedirects(NetworkError):
+    """
+    Number of redirects reached configured limit.
+    """
+
+
 class MalformedResponseError(NetworkError):
     """
     Raised when parser fails to parse response HTTP headers

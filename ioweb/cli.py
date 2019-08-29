@@ -67,6 +67,8 @@ def collect_crawlers():
 def setup_logging(network_logs=False):#, control_logs=False):
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('urllib3.connectionpool').setLevel(level=logging.ERROR)
+    logging.getLogger('urllib3.util.retry').setLevel(level=logging.ERROR)
+    logging.getLogger('urllib3.poolmanager').setLevel(level=logging.ERROR)
     logging.getLogger('ioweb.urllib3_custom').setLevel(level=logging.ERROR)
     if not network_logs:
         logging.getLogger('ioweb.network_service').propagate = False
