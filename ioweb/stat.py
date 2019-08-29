@@ -8,6 +8,7 @@ from copy import deepcopy
 import sys
 from datetime import datetime
 
+logger = logging.getLogger('ioweb.stat')
 
 class Stat(object):
     default_key_aliases = {
@@ -146,7 +147,7 @@ class Stat(object):
         try:
             while True:
                 now = time.time()
-                logging.debug(self.render_moment(now))
+                logger.debug(self.render_moment(now))
                 # Sleep `self.logging_interval` seconds minus time spent on logging
                 sleep_time = (
                     self.logging_interval + (time.time() - now)
@@ -226,14 +227,14 @@ class InfluxdbExportDriver(object):
                 try:
                     self.client.write_points([data])
                 except RequestException:
-                    logging.exception('Fail to send metrics')
+                    logger.exception('Fail to send metrics')
                     time.sleep(1)
                     # reconnecting
                     while True:
                         try:
                             self.connect()
                         except RequestException:
-                            logging.exception(
+                            logger.exception(
                                 'Fail to reconnect to metric database'
                             )
                             time.sleep(1)
