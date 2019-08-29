@@ -34,6 +34,10 @@ setup(
         'cachetools',
         'gevent',
         'pysocks',
+        'lxml',
+        'defusedxml',
+        'selection',
+        'cssselect',
     ],
     keywords='web scraping network crawling cralwer spider pycurl',
     classifiers = [
