@@ -83,6 +83,7 @@ class Request(BaseRequest):
         'data',
         'multipart',
         'verify',
+        'method',
     )
 
     def get_default_config(self):
