@@ -26,7 +26,7 @@ setup(
         ],
     },
     install_requires = [
-        'urllib3==1.24.1',
+        'urllib3==2.8.0',
         'pyopenssl',
         'cryptography',
         'idna',
